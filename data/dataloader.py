@@ -6,6 +6,10 @@ from autosplat.core.camera import Camera  # Your Camera class
 def load_dataset(folder, image_size=(256, 256), skip_seeds=True):
     """
     Load images and cameras from dataset folder.
+    
+    Download *Buddha Dataset* using git
+    `git clone https://github.com/alicevision/dataset_buddha.git`
+    and use `buddha` or `buddha_mini6` as corresponding folder.
 
     Args:
         folder (str): Path to dataset folder containing *_c.png and *_P.txt files.
