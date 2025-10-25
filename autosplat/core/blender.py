@@ -1,7 +1,4 @@
 import keras
-
-class BlenderLayer(keras.layers.Layer):
-import keras
 import numpy as np
 
 class BlenderLayer(keras.layers.Layer):
