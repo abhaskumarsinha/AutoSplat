@@ -1,6 +1,7 @@
 import numpy as np
 import imageio.v3 as iio
 from tqdm import tqdm
+import keras
 
 def render_rotation_gif(renderer, blend_id=0, res=256, radius=2.5, steps=360, save_path="rotation.gif", fps=10):
     """
