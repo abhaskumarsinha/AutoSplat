@@ -1,6 +1,10 @@
 import keras
 
 class BlenderLayer(keras.layers.Layer):
+import keras
+import numpy as np
+
+class BlenderLayer(keras.layers.Layer):
     """
     BlenderLayer: Composites multiple Gaussian3D layers using a Camera.
 
@@ -9,6 +13,13 @@ class BlenderLayer(keras.layers.Layer):
     2. Computes distances from camera to each Gaussian mean and sorts them by distance.
     3. Keeps up to max_gaussians nearest Gaussians.
     4. Performs front-to-back alpha blending in the call() method.
+
+    Warning
+    -------
+    If `camera_trainable=True`, the projection matrix of this layer is trainable. 
+    Use this only when a single scene has been captured from different cameras. 
+    Otherwise, keeping the camera trainable may cause inconsistent focal lengths 
+    or other intrinsic parameters across layers.
 
     Attributes
     ----------
@@ -30,7 +41,7 @@ class BlenderLayer(keras.layers.Layer):
         Background RGB color.
     """
 
-    def __init__(self, camera, gaussians, max_gaussians=128, background_color=(-1, -1, -1), **kwargs):
+    def __init__(self, camera, gaussians, camera_trainable = False, max_gaussians=128, background_color=(-1, -1, -1), **kwargs):
         """
         Initialize BlenderLayer.
 
@@ -40,6 +51,8 @@ class BlenderLayer(keras.layers.Layer):
             Camera used for projection and distance computation.
         gaussians : list of Gaussian3D
             List of Gaussians to blend.
+        camera_trainable : Train Cameras?
+            Train to find focal lengths and principal axes of camera (default False).
         max_gaussians : int, optional
             Maximum number of Gaussians to keep (default 128).
         background_color : tuple or list of 3 floats, optional
@@ -64,7 +77,7 @@ class BlenderLayer(keras.layers.Layer):
             shape=(2, 3),
             dtype='float32',
             initializer=keras.initializers.Constant(proj_tf),
-            trainable=True,
+            trainable=camera_trainable,
         )
 
         self.sort_gaussians_by_distance()
