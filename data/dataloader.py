@@ -27,7 +27,7 @@ def load_dataset(folder, image_size=(256, 256), skip_seeds=True):
     
     for img_file in img_files:
         # Corresponding camera file
-        base_name = img_file.split('_c.png')[0]
+        base_name = img_file.split('_c.png')[0].rstrip('.')
         cam_file = os.path.join(folder, f"{base_name}_P.txt")
         img_path = os.path.join(folder, img_file)
 
