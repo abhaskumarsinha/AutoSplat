@@ -1,0 +1,9 @@
+numpy>=1.23
+scipy>=1.10
+matplotlib>=3.7
+scikit-image>=0.21
+imageio>=2.30
+tqdm>=4.65
+keras>=2.14
+# Optional PyTorch (install only if needed)
+# torch>=2.1
