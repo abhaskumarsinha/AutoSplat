@@ -1,7 +1,7 @@
 import os
 import numpy as np
 import imageio.v3 as iio
-from autosplat.camera import Camera  # Your Camera class
+from autosplat.core.camera import Camera  # Your Camera class
 
 def load_dataset(folder, image_size=(256, 256), skip_seeds=True):
     """
