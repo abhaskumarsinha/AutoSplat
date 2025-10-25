@@ -11,7 +11,7 @@ authors = [
 ]
 readme = "README.md"
 requires-python = ">=3.10"
-license = { file="LICENSE" }
+license = "Apache 2.0"
 dependencies = [
     "numpy>=1.23",
     "scipy>=1.10",
@@ -27,3 +27,10 @@ torch = ["torch>=2.1"]
 
 [project.urls]
 Homepage = "https://github.com/abhaskumarsinha/AutoSplat"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["autosplat*", "autosplat.core*", "autosplat.io*", "autosplat.utils*", "autosplat.visualizer*"]
