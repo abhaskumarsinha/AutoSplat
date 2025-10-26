@@ -2,6 +2,48 @@ import os
 import numpy as np
 import imageio.v3 as iio
 from autosplat.core.camera import Camera  # Your Camera class
+from copy import deepcopy
+
+def normalize_camera_positions(cameras, scale_factor: float = 1.0):
+    """
+    Normalize camera locations jointly to fit within [-a, a] range,
+    maintaining aspect ratio across all axes.
+
+    Parameters
+    ----------
+    cameras : list[Camera]
+        List of Camera instances to normalize.
+    scale_factor : float, default=1.0
+        Scale the normalized range to [-scale_factor, scale_factor].
+
+    Returns
+    -------
+    list[Camera]
+        New list of normalized Camera objects.
+    """
+    if not cameras:
+        return []
+
+    # Stack all camera positions
+    positions = np.stack([cam.location for cam in cameras], axis=0)
+
+    # Find the max absolute coordinate value (joint normalization)
+    max_abs_val = np.max(np.abs(positions))
+    if max_abs_val == 0:
+        max_abs_val = 1.0  # avoid division by zero
+
+    # Normalize all positions keeping relative scale
+    normalized_positions = (positions / max_abs_val) * scale_factor
+
+    # Create new cameras (deepcopy to avoid mutating originals)
+    normalized_cameras = []
+    for cam, new_pos in zip(cameras, normalized_positions):
+        cam_copy = deepcopy(cam)
+        cam_copy.location = new_pos
+        normalized_cameras.append(cam_copy)
+
+    return normalized_cameras
+
 
 def load_dataset(folder, image_size=(256, 256), skip_seeds=True, rotate_images=False):
     """
