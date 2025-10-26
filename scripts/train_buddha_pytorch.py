@@ -13,7 +13,7 @@ from autosplat.core import BlenderLayer
 from autosplat.utils import RenderObject
 from autosplat.visualizer import plot_cameras_plotly
 
-from data.dataloader import load_dataset, normalize_camera_positions
+from ..data.dataloader import load_dataset, normalize_camera_positions
 
 import os
 from typing import Tuple, Optional
