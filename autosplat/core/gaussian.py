@@ -3,39 +3,52 @@ import numpy as np
 
 class Gaussian3D(keras.layers.Layer):
     """
-    3D Gaussian layer for splatting that evaluates only 2D points (screen coordinates).
+    3D Gaussian layer for differentiable splatting and projection into 2D space.
 
-    Workflow:
-    1. Apply an optional external 3x3 rotation and 3-vector translation to the 
-       trainable 3D Gaussian (mean and rotation).
-    2. Project the resulting 3D mean/covariance into 2D using a 2x3 Jacobian 
-       (either provided externally or default).
-    3. Evaluate Gaussian values at 2D input points.
+    This layer represents a trainable 3D Gaussian distribution that can be 
+    transformed, projected, and evaluated at given 2D screen-space points.
 
-    Trainable parameters:
-        - s : diagonal scales (sigma) in 3D
-        - p : quaternion for 3D rotation
-        - mu : 3D mean
-        - rgb : color
-        - alpha : opacity
+    ---
+    **Workflow**
+    1. Apply an optional *external* 3×3 rotation and 3-vector translation 
+       to the *trainable* 3D Gaussian mean and rotation.
+    2. Project the transformed 3D mean and covariance into 2D using a 
+       2×3 Jacobian (either externally provided or a default one).
+    3. Evaluate the resulting 2D Gaussian at input points.
 
-    Optional parameters:
-        - eps : small value for numerical stability in covariance inversion
-        - use_default_projection : whether to use a default 2x3 projection matrix
+    ---
+    **Trainable Parameters**
+    - `s` : (3,) — Diagonal standard deviations (scales σₓ, σᵧ, σ_z)
+    - `p` : (4,) — Quaternion representing 3D rotation
+    - `mu` : (3,) — 3D mean of the Gaussian (initializer: "Uniform" or "Normal")
+    - `rgb` : (3,) — Per-Gaussian color
+    - `alpha` : (1,) — Opacity (transparency control)
+
+    ---
+    **Optional Parameters**
+    - `eps` : float — Small numerical constant to stabilize matrix inversions.
+    - `use_default_projection` : bool — Whether to use an identity-like 2×3 
+      projection matrix when none is provided.
+    - `mu_initializer` : {"Uniform", "Normal"} — Distribution type for initializing
+      the 3D mean. "Uniform" samples from [-1, 1], "Normal" uses stddev = 0.5.
     """
 
-    def __init__(self, eps=1e-6, use_default_projection=True, **kwargs):
+    def __init__(self, eps=1e-6, use_default_projection=True, mu_initializer='Uniform', **kwargs):
         """
         Initialize a 3D Gaussian.
 
         Parameters
         ----------
-        eps : float
-            Small epsilon for numerical stability in covariance inversion.
-        use_default_projection : bool
-            If True, uses identity-like 2x3 default projection when none is provided.
+        eps : float, optional (default=1e-6)
+            Small epsilon value added for numerical stability in covariance inversion.
+        use_default_projection : bool, optional (default=True)
+            If True, uses an internal 2×3 default projection when none is provided.
+        mu_initializer : str, optional (default="Uniform")
+            Initialization mode for the Gaussian mean (`mu`).
+            - "Uniform" → samples uniformly from [-1.0, 1.0]
+            - "Normal"  → samples from a normal distribution with stddev=0.5
         kwargs : dict
-            Additional keyword arguments passed to keras.layers.Layer.
+            Additional keyword arguments passed to `keras.layers.Layer`.
         """
         super().__init__(**kwargs)
         self.eps = float(eps)
@@ -51,12 +64,29 @@ class Gaussian3D(keras.layers.Layer):
             initializer=keras.initializers.RandomUniform(minval=-0.05, maxval=0.05)(shape=(4,), dtype='float32'),
             trainable=True, name='p_rot'
         )
-
-        # Trainable 3D mean
-        self.mu = keras.Variable(
-            initializer=keras.initializers.RandomUniform(minval=-1.0, maxval=1.0)(shape=(3,), dtype='float32'),
-            trainable=True, name='mu'
-        )
+        
+        if initializer == 'Uniform':
+            # Trainable 3D mean (Uniform)
+            self.mu = keras.Variable(
+                keras.initializers.RandomUniform(minval=-1.0, maxval=1.0)(
+                    shape=(3,), dtype='float32'
+                ),
+                trainable=True,
+                name='mu'
+            )
+        
+        elif initializer == 'Normal':
+            # Trainable 3D mean (Normal)
+            self.mu = keras.Variable(
+                keras.initializers.RandomNormal(stddev=0.5)(
+                    shape=(3,), dtype='float32'
+                ),
+                trainable=True,
+                name='mu'
+            )
+        
+        else:
+            raise ValueError(f"Unknown initializer type: {initializer}")
 
         # Trainable Color
         self.rgb = keras.Variable(
@@ -64,30 +94,32 @@ class Gaussian3D(keras.layers.Layer):
             trainable=True, name='rgb'
         )
 
-        # Trainable Alpha
+        # Trainable Alpha (opacity)
         self.alpha = keras.Variable(
             initializer=keras.initializers.RandomUniform(minval=0.7, maxval=1.0)(shape=(1,), dtype='float32'),
             trainable=True, name='alpha'
         )
 
-        # Optional default projection J (2x3) if caller doesn't provide one.
+        # Optional default projection J (2×3)
         self.use_default_projection = bool(use_default_projection)
-        self.default_projection = keras.Variable([[1., 0., 0.],
-                                               [0., 1., 0.]], dtype='float32', trainable = False)  # takes x,y
+        self.default_projection = keras.Variable(
+            [[1., 0., 0.],
+             [0., 1., 0.]], dtype='float32', trainable=False
+        )
 
     def quaternion_to_rotation(self, p):
         """
-        Convert 4-vector quaternion to 3x3 rotation matrix.
+        Convert a quaternion into a 3×3 rotation matrix.
 
         Parameters
         ----------
         p : tensor, shape (4,)
-            Quaternion vector.
+            Quaternion coefficients [q₀, q₁, q₂, q₃].
 
         Returns
         -------
-        R : tensor, shape (3,3)
-            Rotation matrix corresponding to the unit quaternion.
+        R : tensor, shape (3, 3)
+            Corresponding rotation matrix.
         """
         norm = keras.ops.sqrt(keras.ops.sum(p * p) + 1e-12)
         q = p / norm
@@ -106,30 +138,30 @@ class Gaussian3D(keras.layers.Layer):
                                 2.0 * (q2 * q3 + q0 * q1),
                                 1.0 - 2.0 * (q1 * q1 + q2 * q2)], axis=0)
 
-        R = keras.ops.stack([row0, row1, row2], axis=0)  # shape (3,3)
+        R = keras.ops.stack([row0, row1, row2], axis=0)
         return R
 
     def call(self, x_2d, projection=None, rotation=None, translation=None):
         """
-        Evaluate the Gaussian at 2D points.
+        Evaluate the Gaussian at 2D input points.
 
         Parameters
         ----------
-        x_2d : tensor, shape [..., 2]
-            Input 2D points for evaluation.
-        projection : tensor, shape (2,3), optional
-            2x3 projection matrix. If None and use_default_projection=True, uses default.
-        rotation : tensor, shape (3,3), optional
-            External 3x3 rotation matrix applied over trainable rotation.
+        x_2d : tensor, shape (..., 2)
+            Input 2D coordinates at which to evaluate the Gaussian.
+        projection : tensor, shape (2, 3), optional
+            Projection matrix from 3D to 2D. If None, uses default if enabled.
+        rotation : tensor, shape (3, 3), optional
+            External rotation applied over the trainable rotation.
         translation : tensor, shape (3,), optional
-            External 3-vector translation applied after rotation.
+            External translation vector applied after rotation.
 
         Returns
         -------
-        gaussian : tensor, shape [...]
-            Gaussian values at input 2D points.
+        gaussian : tensor, shape (...)
+            Computed Gaussian intensity values for each input 2D point.
         """
-        # original implementation remains unchanged
+        # Implementation unchanged
         x_2d = keras.ops.convert_to_tensor(x_2d, dtype='float32')
         if keras.ops.ndim(x_2d) is None:
             last_dim = keras.ops.shape(x_2d)[-1]
@@ -177,6 +209,9 @@ class Gaussian3D(keras.layers.Layer):
         return gaussian
 
     def __repr__(self):
+        """
+        Return a readable string representation of the Gaussian3D layer.
+        """
         return (f"Gaussian3D(eps={self.eps}, use_default_projection={self.use_default_projection},\n"
                 f"          s={self.s.numpy()}, p={self.p.numpy()}, mu={self.mu.numpy()},\n"
                 f"          rgb={self.rgb.numpy()}, alpha={self.alpha.numpy()})")
