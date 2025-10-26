@@ -29,6 +29,7 @@ def train_gaussian_renderer(
     dataset_dir,
     dataset_image_size=(64, 64),
     rotate_image=True,
+    rotate_image_on_load=True,  # new parameter
     normalize_camera_extrinsics=True,
     gaussian_3d_eps=1e-6,
     camera_matrices_trainable=False,
@@ -68,6 +69,9 @@ def train_gaussian_renderer(
 
     rotate_image : bool, default=True
         Whether to rotate images when loading.
+
+    rotate_image_on_load : bool, default=True
+        Whether to apply rotation specifically during the dataset loading process.
 
     normalize_camera_extrinsics : bool, default=True
         Normalize camera extrinsics during preprocessing.
@@ -145,6 +149,7 @@ def train_gaussian_renderer(
     total_epochs : int, default=100
         Total number of epochs for training.
     """
+
 
     # === Setup ===
     os.makedirs(savepath, exist_ok=True)
@@ -254,6 +259,7 @@ def get_args():
     parser.add_argument('--dataset_dir', type=str, required=True, help='Path to dataset directory.')
     parser.add_argument('--dataset_image_size', type=int, nargs=2, default=(64, 64), help='Image size (H W) for dataset images.')
     parser.add_argument('--rotate_image', type=bool, default=True, help='Whether to rotate images when loading.')
+    parser.add_argument('--rotate_image_on_load', type=bool, default=True, help='Whether to apply rotation specifically during dataset loading.')  # new argument
     parser.add_argument('--normalize_camera_extrinsics', type=bool, default=True, help='Normalize camera extrinsics during preprocessing.')
     parser.add_argument('--gaussian_3d_eps', type=float, default=1e-6, help='Small epsilon for numerical stability in Gaussian operations.')
     parser.add_argument('--camera_matrices_trainable', type=bool, default=False, help='Optimize camera extrinsics during training.')
@@ -279,6 +285,7 @@ def get_args():
     parser.add_argument('--torch_compile_mode', type=str, default='default', help="Torch compile mode ('default', 'reduce-overhead', 'max-autotune').")
     parser.add_argument('--save_training_progress_examples', type=bool, default=False, help='Save example renderings during training.')
     parser.add_argument('--total_epochs', type=int, default=100, help='Total number of epochs.')
+
 
     return parser.parse_args()
 
