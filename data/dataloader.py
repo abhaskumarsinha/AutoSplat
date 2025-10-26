@@ -3,18 +3,19 @@ import numpy as np
 import imageio.v3 as iio
 from autosplat.core.camera import Camera  # Your Camera class
 
-def load_dataset(folder, image_size=(256, 256), skip_seeds=True):
+def load_dataset(folder, image_size=(256, 256), skip_seeds=True, rotate_images=False):
     """
     Load images and cameras from dataset folder.
     
-    Download *Buddha Dataset* using git
-    `git clone https://github.com/alicevision/dataset_buddha.git`
-    and use `buddha` or `buddha_mini6` as corresponding folder.
+    Download *Buddha Dataset* using:
+        git clone https://github.com/alicevision/dataset_buddha.git
+    and use `buddha` or `buddha_mini6` as the corresponding folder.
 
     Args:
         folder (str): Path to dataset folder containing *_c.png and *_P.txt files.
         image_size (tuple): Desired output size (H, W) for images.
         skip_seeds (bool): Whether to ignore _seeds.bin files.
+        rotate_images (bool): If True, rotates all images by 90° clockwise.
 
     Returns:
         images (list of np.ndarray): List of images resized to image_size.
@@ -35,12 +36,18 @@ def load_dataset(folder, image_size=(256, 256), skip_seeds=True):
         cam_file = os.path.join(folder, f"{base_name}_P.txt")
         img_path = os.path.join(folder, img_file)
 
-        # Load and resize image
+        # Load image
         img = iio.imread(img_path)
+
+        # Rotate if enabled
+        if rotate_images:
+            img = np.rot90(img, k=-1)  # 90° clockwise
+
+        # Resize using simple nearest-neighbor / PIL if needed
         if img.shape[:2] != image_size:
-            # Resize using simple nearest-neighbor / PIL if you like
             from PIL import Image
             img = np.array(Image.fromarray(img).resize(image_size[::-1], Image.BILINEAR))
+        
         images.append(img)
 
         # Load camera
@@ -59,9 +66,8 @@ def load_dataset(folder, image_size=(256, 256), skip_seeds=True):
         quat = r.as_quat()  # [x, y, z, w]
 
         # Compute focal length and principal point if available
-        # Here assuming t[2] stores approximate focus / scale
-        focus = np.linalg.norm(R[0])  # crude approximation, refine if dataset provides fx, fy
-        c = (0.0, 0.0)  # placeholder, if principal point not in file
+        focus = np.linalg.norm(R[0])  # crude approximation
+        c = (0.0, 0.0)  # placeholder if not provided
 
         cam = Camera(
             camera_id=int(base_name),
