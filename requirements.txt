@@ -5,5 +5,9 @@ scikit-image>=0.21
 imageio>=2.30
 tqdm>=4.65
 keras>=2.14
+
+# Visualization (optional but recommended)
+plotly>=5.22
+
 # Optional PyTorch (install only if needed)
 # torch>=2.1
