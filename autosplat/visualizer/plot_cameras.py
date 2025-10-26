@@ -1,6 +1,27 @@
 import numpy as np
-import plotly.graph_objects as go
-from scipy.spatial.transform import Rotation as R
+
+
+
+# --- Safe imports for optional visualization dependencies ---
+try:
+    import plotly.graph_objects as go
+except ImportError as e:
+    raise ImportError(
+        "❌ Plotly is required for camera visualization. "
+        "Please install it via:\n    pip install plotly"
+    ) from e
+
+try:
+    from scipy.spatial.transform import Rotation as R
+except ImportError as e:
+    raise ImportError(
+        "❌ SciPy is required for camera visualization. "
+        "Please install it via:\n    pip install scipy"
+    ) from e
+
+
+
+
 
 def plot_cameras_plotly(cameras, arrow_frac=0.15, pad_frac=0.2):
     """
