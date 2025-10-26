@@ -5,9 +5,9 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "autosplat"
 version = "0.1.0"
-description = "Gaussian splatting renderer and supporting JAX, TensorFlow, PyTorch pipelines, requiring no manual gradients and supports CPU/GPU seamlessly."
+description = "Gaussian splatting renderer with JAX, TensorFlow, and PyTorch support, requiring no manual gradients and supporting CPU/GPU seamlessly."
 authors = [
-    { name="Abhas Kumar Sinha", email="abhaskumarsinha@gmail.com" }
+    { name = "Abhas Kumar Sinha", email = "abhaskumarsinha@gmail.com" }
 ]
 readme = "README.md"
 requires-python = ">=3.10"
@@ -19,11 +19,19 @@ dependencies = [
     "scikit-image>=0.21",
     "imageio>=2.30",
     "tqdm>=4.65",
-    "keras>=2.14"
+    "keras>=2.14",
+    # Visualization
+    "plotly>=5.22"
 ]
 
 [project.optional-dependencies]
 torch = ["torch>=2.1"]
+dev = [
+    "black>=24.4.0",
+    "flake8>=7.0.0",
+    "ipykernel>=6.29",
+    "notebook>=7.1",
+]
 
 [project.urls]
 Homepage = "https://github.com/abhaskumarsinha/AutoSplat"
@@ -33,4 +41,10 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["autosplat*", "autosplat.core*", "autosplat.io*", "autosplat.utils*", "autosplat.visualizer*"]
+include = [
+    "autosplat*",
+    "autosplat.core*",
+    "autosplat.io*",
+    "autosplat.utils*",
+    "autosplat.visualizer*"
+]
