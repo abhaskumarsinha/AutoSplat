@@ -9,6 +9,7 @@ os.environ["KERAS_BACKEND"] = "torch"
 
 import keras
 import matplotlib.pyplot as plt
+import numpy as np
 
 from autosplat.core import Camera
 from autosplat.core import Gaussian3D
