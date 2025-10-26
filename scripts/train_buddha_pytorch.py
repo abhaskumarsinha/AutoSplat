@@ -1,4 +1,8 @@
+import sys
 import os
+
+# Add AutoSplat/ to Python module search path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # This script can best be run with torch backend.
 os.environ["KERAS_BACKEND"] = "torch"
