@@ -10,6 +10,7 @@ import imageio as iio
 from PIL import Image
 from scipy.linalg import rq
 from scipy.spatial.transform import Rotation as R
+import re
 
 def decompose_projection_matrix(P):
     """
