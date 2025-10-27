@@ -262,7 +262,7 @@ def get_args():
     parser.add_argument('--rotate_image', type=bool, default=True, help='Whether to rotate images when loading.')
     parser.add_argument('--rotate_image_on_load', type=bool, default=True, help='Whether to apply rotation specifically during dataset loading.')  # new argument
     parser.add_argument('--normalize_camera_extrinsics', type=bool, default=True, help='Normalize camera extrinsics during preprocessing.')
-    parser.add_argument('--gaussian_3d_eps', type=float, default=1e-6, help='Small epsilon for numerical stability in Gaussian operations.')
+    parser.add_argument('--gaussian_eps', type=float, default=1e-6, help='Small epsilon for numerical stability in Gaussian operations.')
     parser.add_argument('--camera_matrices_trainable', type=bool, default=False, help='Optimize camera extrinsics during training.')
     parser.add_argument('--total_gaussians', type=int, default=1024, help='Total number of Gaussians in the scene.')
     parser.add_argument('--max_gaussians', type=int, default=128, help='Maximum number of Gaussians rendered at once.')
