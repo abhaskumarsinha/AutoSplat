@@ -40,6 +40,8 @@ def normalize_camera_positions(cameras, scale_factor: float = 1.0):
     for cam, new_pos in zip(cameras, normalized_positions):
         cam_copy = deepcopy(cam)
         cam_copy.location = new_pos
+        print(positions / max_abs_val)
+        print(cam_copy.jacobian)
         cam_copy.jacobian = cam_copy.jacobian/(positions / max_abs_val)
         normalized_cameras.append(cam_copy)
 
