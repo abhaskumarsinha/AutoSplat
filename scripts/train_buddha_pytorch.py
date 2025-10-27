@@ -229,7 +229,7 @@ def train_gaussian_renderer(
             loss = torch.mean((I_pred - I_gt) ** 2)
         loss.backward()
         optimizer.step()
-        log(f"Step {step:03d}: loss={loss.item():.6f} ")
+        print(f"Step {step:03d}: loss={loss.item():.6f} ")
 
         if step % 10 == 0:
             for layer in renderer.blend_layers:
