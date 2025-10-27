@@ -178,7 +178,7 @@ def train_gaussian_renderer(
 
     gaussians = []
     for _ in range(total_gaussians):
-        gaussians.append(Gaussian3D(eps=gaussian_eps, use_default_projection=True, initializer=mu_initializer))
+        gaussians.append(Gaussian3D(eps=gaussian_eps, use_default_projection=True, mu_initializer=mu_initializer))
 
     scenes = []
     for cam in cameras:
