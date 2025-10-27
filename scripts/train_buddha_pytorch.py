@@ -182,7 +182,7 @@ def train_gaussian_renderer(
 
     scenes = []
     for cam in cameras:
-        scenes.append(BlendLayer(cam, gaussians, camera_trainable=camera_matrices_trainable, max_gaussians=max_gaussians, background_color=background_color))
+        scenes.append(BlenderLayer(cam, gaussians, camera_trainable=camera_matrices_trainable, max_gaussians=max_gaussians, background_color=background_color))
 
     renderer = RenderObject(blend_layers=scenes, image_size=dataset_image_size).to(device)
 
