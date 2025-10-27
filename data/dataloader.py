@@ -151,73 +151,89 @@ def normalize_camera_projection_list(P_list, camera_ids=None, image_scales=None,
     return cameras, meta
 
 
+def _extract_base_name_from_image(img_file: str) -> str:
+    """
+    Robustly extract the base name for camera file mapping from an image filename.
+    Handles cases like:
+      - 00001_c.png
+      - 00001._c.png
+      - 00001_c.JPG
+      - weird.extra.00001._c.png
+    Returns the base name without any trailing dots.
+    """
+    # look for the last occurrence of "_c" (case-insensitive)
+    lower = img_file.lower()
+    pos = lower.rfind('_c')
+    if pos != -1:
+        base = img_file[:pos]
+    else:
+        # fallback: remove the extension, then strip last underscore-group
+        base = os.path.splitext(img_file)[0]
+        # if there is an underscore, assume last underscore separates id from suffix
+        if '_' in base:
+            base = base.rsplit('_', 1)[0]
+
+    # remove any stray trailing dots that created the "00001." situation
+    base = base.rstrip('.')
+    return base
+
 def load_dataset(folder, image_size=(256, 256), skip_seeds=True, rotate_images=False):
     """
     Load images and normalized cameras from dataset folder.
 
     Returns:
         images (list[np.ndarray]), cameras (list[Camera])
-    The returned `cameras` are normalized globally so all camera locations are in [-1,1],
-    and intrinsics (focus, principal point) are scaled accordingly. This preserves the
-    same return format as the previous implementation.
     """
     images = []
-    cameras = []
-
-    files = sorted(os.listdir(folder))
-
-    # find image files (ending with '_c.png')
-    img_files = [f for f in files if f.endswith('_c.png')]
-    # optionally ignore seeds-like names (if any weird files present)
-    if skip_seeds:
-        img_files = [f for f in img_files if '_seeds' not in f]
-
     P_list = []
     ids = []
     image_scales = []
 
-    for idx, img_file in enumerate(img_files):
-        base_name = img_file[:-6]  # remove trailing '_c.png'
+    files = sorted(os.listdir(folder))
+
+    # find image files (endswith like '_c.<ext>' case-insensitive)
+    img_files = [f for f in files if re.search(r'[_\.]c\.[A-Za-z0-9]+$', f)]
+    if skip_seeds:
+        img_files = [f for f in img_files if '_seeds' not in f.lower()]
+
+    for img_file in img_files:
+        base_name = _extract_base_name_from_image(img_file)
         cam_file = os.path.join(folder, f"{base_name}_P.txt")
         img_path = os.path.join(folder, img_file)
 
-        if not os.path.exists(cam_file):
-            raise FileNotFoundError(f"Expected camera file {cam_file} for image {img_path}")
+        if not os.path.exists(img_path):
+            # safety: skip missing images (should not happen normally)
+            continue
 
-        # --- load image ---
+        # Load image
         img = iio.imread(img_path)
-
-        # rotate before resizing (keeps pixel scale logic straightforward)
         if rotate_images:
-            img = np.rot90(img, k=-1)  # 90° clockwise
+            img = np.rot90(img, k=-1)
 
-        # store original size BEFORE resizing, used to scale intrinsics
         orig_h, orig_w = img.shape[:2]
         new_h, new_w = image_size
 
-        # resize if required (BILINEAR)
         if (orig_h, orig_w) != (new_h, new_w):
             img = np.array(Image.fromarray(img).resize((new_w, new_h), Image.BILINEAR))
 
         images.append(img)
 
-        # parse projection matrix P
+        if not os.path.exists(cam_file):
+            raise FileNotFoundError(f"Expected camera file {cam_file} for image {img_path}")
+
         P = np.loadtxt(cam_file)
         if P.shape != (3, 4):
             raise ValueError(f"Unexpected camera shape {P.shape} in {cam_file}")
 
         P_list.append(P)
-        ids.append(base_name)  # keep string id; camera_from_decomposed will try int()
-        # image scale (sx, sy) that maps original -> requested
+        ids.append(base_name)
         s_x = float(new_w) / float(orig_w)
         s_y = float(new_h) / float(orig_h)
         image_scales.append((s_x, s_y))
 
-    # Decompose + globally normalize intrinsics & camera centers
     if len(P_list) == 0:
         return images, []
 
     cameras, meta = normalize_camera_projection_list(P_list, camera_ids=ids, image_scales=image_scales)
-    # meta contains 'centroid' and 'scale' in case caller needs to transform scene geometry
-
     return images, cameras
+
