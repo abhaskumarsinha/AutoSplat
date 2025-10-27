@@ -133,7 +133,7 @@ def train_gaussian_renderer(
         Weight decay regularization term.
 
     coupled_weight_decay : bool, default=False
-        Whether to use decoupled weight decay (Adam-style).
+        Whether to use decoupled weight decay (Adam-style). [Not Implemented!]
 
     checkpoint_frequency : int, default=50
         Save model checkpoint every n epochs.
@@ -186,10 +186,10 @@ def train_gaussian_renderer(
 
     renderer = RenderObject(blend_layers=scenes, image_size=dataset_image_size).to(device)
 
-    optimizer = torch.optim.Adam(renderer.parameters(), lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, coupled_weight_decay=coupled_weight_decay)
+    optimizer = torch.optim.Adam(renderer.parameters(), lr=lr, betas=betas, eps=eps, weight_decay=weight_decay)
     if torch_compile_mode is not None:
         renderer = torch.compile(renderer, mode=torch_compile_mode)
-    optimizer = torch.optim.Adam(renderer.parameters(), lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, coupled_weight_decay=decoupled_weight_decay)
+    optimizer = torch.optim.Adam(renderer.parameters(), lr=lr, betas=betas, eps=eps, weight_decay=weight_decay)
     I_gt = torch.tensor(images, dtype=torch.float32, device=device)
 
     blend_id_indices = [int(i) for i in range(len(scenes))]
