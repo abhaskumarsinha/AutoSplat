@@ -24,6 +24,7 @@ import os
 from typing import Tuple, Optional
 import torch
 import argparse
+from tqdm import tqdm
 
 
 def train_gaussian_renderer(
