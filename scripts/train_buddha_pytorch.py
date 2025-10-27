@@ -36,7 +36,7 @@ def train_gaussian_renderer(
     camera_matrices_trainable=False,
     total_gaussians=1024,
     max_gaussians=128,
-    mu_initializer='RandomUniform',
+    mu_initializer='random_uniform',
     background_color=(-1.0, -1.0, -1.0),
     render_size=64,  # square only
     render_rotation_gif=True,
@@ -91,7 +91,7 @@ def train_gaussian_renderer(
         Must satisfy total_gaussians > max_gaussians.
 
     mu_initializer : str, default='uniform'
-        Initializer for Gaussian mean ('RandomUniform' or 'RandomNormal').
+        Initializer for Gaussian mean ('random_uniform' or 'random_normal').
 
     background_color : tuple(float, float, float), default=(-1.0, -1.0, -1.0)
         Background RGB color used for rendering.
@@ -266,7 +266,7 @@ def get_args():
     parser.add_argument('--camera_matrices_trainable', type=bool, default=False, help='Optimize camera extrinsics during training.')
     parser.add_argument('--total_gaussians', type=int, default=1024, help='Total number of Gaussians in the scene.')
     parser.add_argument('--max_gaussians', type=int, default=128, help='Maximum number of Gaussians rendered at once.')
-    parser.add_argument('--mu_initializer', type=str, choices=['RandomUniform', 'RandomNormal'], default='RandomUniform', help='Initializer for Gaussian mean.')
+    parser.add_argument('--mu_initializer', type=str, choices=['random_uniform', 'random_normal'], default='random_uniform', help='Initializer for Gaussian mean.')
     parser.add_argument('--background_color', type=float, nargs=3, default=(-1.0, -1.0, -1.0), help='Background RGB color.')
     parser.add_argument('--render_size', type=int, default=64, help='Render output size (square).')
     parser.add_argument('--render_rotation_gif', type=bool, default=True, help='Whether to generate rotating camera GIF.')
