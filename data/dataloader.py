@@ -103,7 +103,7 @@ def normalize_cameras_and_intrinsics(cameras, scale_factor: float = 1.0, scale_i
 
         normalized.append(tgt)
 
-    return normalized, s
+    return normalized
 
 
 def load_dataset(folder, image_size=(256, 256), skip_seeds=True, rotate_images=False):
