@@ -18,6 +18,8 @@ from autosplat.core import BlenderLayer
 from autosplat.utils import RenderObject
 from autosplat.visualizer import render_rotation_gif as render_gif
 
+from autosplat.io import main
+
 from data.dataloader import load_dataset, normalize_camera_positions
 
 import os
