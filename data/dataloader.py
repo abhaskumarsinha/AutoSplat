@@ -4,106 +4,46 @@ import imageio.v3 as iio
 from autosplat.core.camera import Camera  # Your Camera class
 from copy import deepcopy
 
-from copy import deepcopy
-import numpy as np
-from typing import Iterable, Tuple
-
-from scipy.linalg import rq
-from scipy.spatial.transform import Rotation
-
-
-def decompose_projection_matrix(P: np.ndarray):
+def normalize_camera_positions(cameras, scale_factor: float = 1.0):
     """
-    Decompose 3x4 projection matrix P into intrinsic K (3x3), rotation R (3x3),
-    and camera center C (3,).
+    Normalize camera locations jointly to fit within [-a, a] range,
+    maintaining aspect ratio across all axes.
 
-    Returns (K, R, C) where:
-      - P = K @ [R | -R C]
-      - K: upper-triangular intrinsic matrix (normalized so K[2,2] == 1)
-      - R: rotation matrix (3x3)
-      - C: camera center in world coordinates (3,)
+    Parameters
+    ----------
+    cameras : list[Camera]
+        List of Camera instances to normalize.
+    scale_factor : float, default=1.0
+        Scale the normalized range to [-scale_factor, scale_factor].
+
+    Returns
+    -------
+    list[Camera]
+        New list of normalized Camera objects.
     """
-    if P.shape != (3, 4):
-        raise ValueError("P must be 3x4")
+    if not cameras:
+        return []
 
-    M = P[:, :3]
-    # RQ decomposition yields K (upper-triangular) and R (rotation-like)
-    K, R = rq(M)
+    # Stack all camera positions
+    positions = np.stack([cam.location for cam in cameras], axis=0)
 
-    # Ensure positive diagonal in K
-    diag_sign = np.sign(np.diag(K))
-    # Replace zeros with 1 to avoid zero diagonal sign
-    diag_sign[diag_sign == 0] = 1.0
-    S = np.diag(diag_sign)
-    K = K @ S
-    R = S @ R
+    # Find the max absolute coordinate value (joint normalization)
+    max_abs_val = np.max(np.abs(positions))
+    if max_abs_val == 0:
+        max_abs_val = 1.0  # avoid division by zero
 
-    # Normalize K so that K[2,2] == 1
-    if K[2, 2] == 0:
-        raise ValueError("Invalid intrinsic K with zero bottom-right entry")
-    K = K / K[2, 2]
+    # Normalize all positions keeping relative scale
+    normalized_positions = (positions / max_abs_val) * scale_factor
 
-    # Camera center C computed from P[:,3]
-    p3 = P[:, 3]
-    # P[:,3] = -K R C  =>  C = - R.T @ K^{-1} @ P[:,3]
-    K_inv = np.linalg.inv(K)
-    C = -R.T @ (K_inv @ p3)
+    # Create new cameras (deepcopy to avoid mutating originals)
+    normalized_cameras = []
+    for cam, new_pos in zip(cameras, normalized_positions):
+        cam_copy = deepcopy(cam)
+        cam_copy.location = new_pos
+        cam_copy.jacobian = cam_copy.jacobian/(positions / max_abs_val)
+        normalized_cameras.append(cam_copy)
 
-    # Ensure R is a proper rotation (determinant = +1). If det=-1 flip
-    if np.linalg.det(R) < 0:
-        R = -R
-        K = -K
-
-    return K, R, C
-
-
-def normalize_cameras_and_intrinsics(cameras, scale_factor: float = 1.0, scale_intrinsics: bool = True, inplace=False):
-    """
-    Jointly normalize camera locations so max_abs(location) == scale_factor.
-    If scale_intrinsics=True, multiply intrinsics (K / focus / c) by same scale s.
-    Returns (normalized_cameras, s)
-    """
-    cams = list(cameras)
-    if len(cams) == 0:
-        return [], 1.0
-
-    positions = np.stack([cam.location for cam in cams], axis=0)
-    max_abs = float(np.max(np.abs(positions)))
-    if max_abs == 0:
-        max_abs = 1.0
-    s = scale_factor / max_abs
-
-    normalized = []
-    for cam in cams:
-        tgt = cam if inplace else deepcopy(cam)
-        tgt.location = np.asarray(tgt.location, dtype=float) * s
-
-        if scale_intrinsics:
-            # scale jacobian if present
-            if hasattr(tgt, "jacobian") and tgt.jacobian is not None:
-                tgt.jacobian = np.asarray(tgt.jacobian, dtype=float) * s
-                # update focus and principal point from new jacobian
-                tgt.focus = float(tgt.jacobian[0, 0])
-                tgt.c = np.array([tgt.jacobian[0, 2], tgt.jacobian[1, 2]])
-            else:
-                # fall back to scaling focus and c if jacobian isn't present
-                if hasattr(tgt, "focus") and tgt.focus is not None:
-                    tgt.focus = float(tgt.focus) * s
-                if hasattr(tgt, "c") and tgt.c is not None:
-                    tgt.c = np.asarray(tgt.c, dtype=float) * s
-            # recompute jacobian if required
-            if not hasattr(tgt, "jacobian") or tgt.jacobian is None:
-                tgt.jacobian = tgt.compute_jacobian()
-        else:
-            # if not scaling intrinsics, ensure jacobian reflects current focus/c
-            tgt.jacobian = tgt.compute_jacobian()
-
-        # recompute rotation matrix (if rotation_angles modified elsewhere)
-        tgt.rotation_matrix = tgt.compute_rotation_matrix()
-
-        normalized.append(tgt)
-
-    return normalized
+    return normalized_cameras
 
 
 def load_dataset(folder, image_size=(256, 256), skip_seeds=True, rotate_images=False):
