@@ -12,6 +12,117 @@ from scipy.linalg import rq
 from scipy.spatial.transform import Rotation as R
 import re
 
+
+def normalize_camera(
+    cameras,
+    image_size=(256, 256),
+    world_box_min=(-1.0, -1.0, -1.0),
+    world_box_max=(1.0, 1.0, 1.0),
+    margin=0.05,
+    eps=1e-6,
+    verbose=False
+):
+    """
+    Adjust camera intrinsics (focus, principal point, jacobian) so that the unit
+    world box defined by world_box_min..world_box_max fits inside the image
+    frustum for each camera.
+
+    Modifies Camera objects in-place and returns meta {'image_size', 'margin'}.
+
+    Logic:
+      - compute the 8 corners of the world box
+      - for each camera:
+          - transform corners into camera coordinates: X_cam = R @ (X_world - cam.location)
+          - compute ratios rx = |x_cam / z_cam|, ry = |y_cam / z_cam|
+            (if z_cam <= eps it's clamped to eps to avoid div-by-zero)
+          - find max_rx, max_ry across corners
+          - set fx = (W/2) / (max_rx * (1+margin))  (so unit-box fills image with margin)
+            similarly fy = (H/2) / (max_ry * (1+margin))
+          - set cam.focus = (fx + fy) / 2
+          - set cam.c = (W/2, H/2)  (image center)
+          - update cam.jacobian accordingly and recompute dependent fields
+
+    Notes:
+      - If all z_cam for corners are <= 0 (camera inside box looking away), we
+        clamp z to eps to avoid massive focals; result may be unnatural for that camera.
+      - margin is fractional extra space (0.05 = 5% extra border).
+    """
+    W, H = image_size[1], image_size[0]  # image_size is (H, W)
+    # prepare box corners
+    mins = np.asarray(world_box_min, dtype=float)
+    maxs = np.asarray(world_box_max, dtype=float)
+    corners = []
+    for xi in [mins[0], maxs[0]]:
+        for yi in [mins[1], maxs[1]]:
+            for zi in [mins[2], maxs[2]]:
+                corners.append(np.array([xi, yi, zi], dtype=float))
+    corners = np.stack(corners, axis=0)  # (8,3)
+
+    for cam in cameras:
+        Rmat = cam.rotation_matrix  # 3x3, should map world->camera: X_cam = R @ (X_world - C)
+        C_world = cam.location       # camera center in world coords
+
+        # transform corners into camera coords
+        rel = corners - C_world[None, :]         # (8,3)
+        corners_cam = (Rmat @ rel.T).T           # (8,3)
+
+        xs = corners_cam[:, 0]
+        ys = corners_cam[:, 1]
+        zs = corners_cam[:, 2]
+
+        # clamp z to avoid division by zero and handle behind-camera points
+        zs_clamped = np.where(zs > eps, zs, eps)
+
+        # ratios
+        rx = np.abs(xs / zs_clamped)
+        ry = np.abs(ys / zs_clamped)
+
+        max_rx = np.max(rx)
+        max_ry = np.max(ry)
+
+        # If both are zero (camera extremely far or degenerate), fallback to small value:
+        if max_rx <= 0:
+            max_rx = eps
+        if max_ry <= 0:
+            max_ry = eps
+
+        # compute focal lengths in pixel units so that fx * max_rx == W/2 (half width)
+        fx = (W * 0.5) / (max_rx * (1.0 + margin))
+        fy = (H * 0.5) / (max_ry * (1.0 + margin))
+
+        # choose single focus scalar as average (keeps aspect)
+        f_new = float((fx + fy) / 2.0)
+
+        # set principal point to image center (you can preserve previous offset if you want)
+        cx_new = float(W * 0.5)
+        cy_new = float(H * 0.5)
+
+        # write back to Camera
+        cam.focus = f_new
+        cam.c = np.array([cx_new, cy_new], dtype=float)
+
+        # update jacobian format used elsewhere: [[f,0,cx],[0,f,cy],[0,0,1]]
+        cam.jacobian = np.array([
+            [cam.focus, 0.0, cam.c[0]],
+            [0.0, cam.focus, cam.c[1]],
+            [0.0, 0.0, 1.0]
+        ], dtype=float)
+
+        # ensure rotation_matrix is consistent (no change) and keep as-is
+        # If Camera has methods that rely on jacobian etc, recompute those if needed:
+        # If your Camera class had compute_jacobian() use that; but we set it directly.
+
+        if verbose:
+            print(f"Camera ID: {cam.camera_id}")
+            print(f"  max_rx={max_rx:.6g}, max_ry={max_ry:.6g}")
+            print(f"  set focus={cam.focus:.6g}, c=({cam.c[0]:.3f},{cam.c[1]:.3f})")
+            print(f"  location={cam.location}")
+            print()
+
+    meta = {'image_size': image_size, 'margin': margin}
+    return cameras, meta
+
+
 def decompose_projection_matrix(P):
     """
     Decompose 3x4 projection P into (K, R, C)
