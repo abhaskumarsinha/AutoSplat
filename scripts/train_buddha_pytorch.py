@@ -16,7 +16,7 @@ from autosplat.core import Gaussian3D
 from autosplat.core import BlenderLayer
 
 from autosplat.utils import RenderObject
-from autosplat.visualizer import plot_cameras_plotly
+from autosplat.visualizer import render_rotation_gif as render_gif
 
 from data.dataloader import load_dataset, normalize_camera_positions
 
@@ -239,7 +239,7 @@ def train_gaussian_renderer(
         if step % checkpoint_frequency == 0 or step == total_epochs - 1:
             if render_rotation_gif:
                 rotation_gif_path = os.path.join(savepath, "rotation.gif")
-                render_rotation_gif(renderer=renderer, blend_id=0, res=render_size, radius=radius, steps=steps, save_path=rotation_gif_path, fps=fps)
+                render_gif(renderer=renderer, blend_id=0, res=render_size, radius=radius, steps=steps, save_path=rotation_gif_path, fps=fps)
             if savepath is not None:
                 main(input_folder=None, output_folder=savepath, save_cameras=True, save_gaussians=True, overwrite=False)
             if save_training_progress_examples:
