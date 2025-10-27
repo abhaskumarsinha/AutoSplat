@@ -33,7 +33,7 @@ class Gaussian3D(keras.layers.Layer):
       the 3D mean. "Uniform" samples from [-1, 1], "Normal" uses stddev = 0.5.
     """
 
-    def __init__(self, eps=1e-6, use_default_projection=True, mu_initializer='Uniform', **kwargs):
+    def __init__(self, eps=1e-6, use_default_projection=True, mu_initializer='random_uniform', **kwargs):
         """
         Initialize a 3D Gaussian.
 
@@ -45,8 +45,8 @@ class Gaussian3D(keras.layers.Layer):
             If True, uses an internal 2×3 default projection when none is provided.
         mu_initializer : str, optional (default="Uniform")
             Initialization mode for the Gaussian mean (`mu`).
-            - "Uniform" → samples uniformly from [-1.0, 1.0]
-            - "Normal"  → samples from a normal distribution with stddev=0.5
+            - "random_uniform" → samples uniformly from [-1.0, 1.0]
+            - "random_normal"  → samples from a normal distribution with stddev=0.5
         kwargs : dict
             Additional keyword arguments passed to `keras.layers.Layer`.
         """
