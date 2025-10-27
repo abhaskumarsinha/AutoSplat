@@ -8,84 +8,100 @@ from copy import deepcopy
 import numpy as np
 from typing import Iterable, Tuple
 
-def normalize_cameras_and_intrinsics(
-    cameras: Iterable[Camera],
-    scale_factor: float = 1.0,
-    scale_intrinsics: bool = False,
-    inplace: bool = False
-) -> Tuple[list, float]:
+from scipy.linalg import rq
+from scipy.spatial.transform import Rotation
+
+
+def decompose_projection_matrix(P: np.ndarray):
     """
-    Normalize camera locations to fit within [-scale_factor, scale_factor] across all axes,
-    and optionally scale intrinsics (focus and principal point) by the same factor.
+    Decompose 3x4 projection matrix P into intrinsic K (3x3), rotation R (3x3),
+    and camera center C (3,).
 
-    Parameters
-    ----------
-    cameras : iterable of Camera
-        Input Camera objects.
-    scale_factor : float
-        The desired half-range after normalization; positions are scaled so that
-        max(abs(positions)) == scale_factor.
-    scale_intrinsics : bool
-        If True, multiply camera.focus and camera.c by the same scale. Use this
-        only when intrinsics are in the same *world* units as camera locations.
-    inplace : bool
-        If True, modify the provided Camera objects in-place; otherwise a deepcopy
-        is returned.
+    Returns (K, R, C) where:
+      - P = K @ [R | -R C]
+      - K: upper-triangular intrinsic matrix (normalized so K[2,2] == 1)
+      - R: rotation matrix (3x3)
+      - C: camera center in world coordinates (3,)
+    """
+    if P.shape != (3, 4):
+        raise ValueError("P must be 3x4")
 
-    Returns
-    -------
-    normalized_cameras : list[Camera]
-        New list of normalized Camera objects (or the same objects when inplace=True).
-    applied_scale : float
-        The numeric scale s that was applied (new_location = old_location * s).
+    M = P[:, :3]
+    # RQ decomposition yields K (upper-triangular) and R (rotation-like)
+    K, R = rq(M)
+
+    # Ensure positive diagonal in K
+    diag_sign = np.sign(np.diag(K))
+    # Replace zeros with 1 to avoid zero diagonal sign
+    diag_sign[diag_sign == 0] = 1.0
+    S = np.diag(diag_sign)
+    K = K @ S
+    R = S @ R
+
+    # Normalize K so that K[2,2] == 1
+    if K[2, 2] == 0:
+        raise ValueError("Invalid intrinsic K with zero bottom-right entry")
+    K = K / K[2, 2]
+
+    # Camera center C computed from P[:,3]
+    p3 = P[:, 3]
+    # P[:,3] = -K R C  =>  C = - R.T @ K^{-1} @ P[:,3]
+    K_inv = np.linalg.inv(K)
+    C = -R.T @ (K_inv @ p3)
+
+    # Ensure R is a proper rotation (determinant = +1). If det=-1 flip
+    if np.linalg.det(R) < 0:
+        R = -R
+        K = -K
+
+    return K, R, C
+
+
+def normalize_cameras_and_intrinsics(cameras, scale_factor: float = 1.0, scale_intrinsics: bool = True, inplace=False):
+    """
+    Jointly normalize camera locations so max_abs(location) == scale_factor.
+    If scale_intrinsics=True, multiply intrinsics (K / focus / c) by same scale s.
+    Returns (normalized_cameras, s)
     """
     cams = list(cameras)
     if len(cams) == 0:
         return [], 1.0
 
-    # stack positions: shape (N, 3)
     positions = np.stack([cam.location for cam in cams], axis=0)
-    max_abs_val = np.max(np.abs(positions))
-    if max_abs_val == 0:
-        max_abs_val = 1.0
-
-    s = (scale_factor / max_abs_val)
+    max_abs = float(np.max(np.abs(positions)))
+    if max_abs == 0:
+        max_abs = 1.0
+    s = scale_factor / max_abs
 
     normalized = []
     for cam in cams:
-        target_cam = cam if inplace else deepcopy(cam)
+        tgt = cam if inplace else deepcopy(cam)
+        tgt.location = np.asarray(tgt.location, dtype=float) * s
 
-        # scale translation/location
-        target_cam.location = np.asarray(target_cam.location, dtype=float) * s
-
-        # optionally scale intrinsics (focus and principal point) by same s
         if scale_intrinsics:
-            # protect against missing attributes or None
-            if hasattr(target_cam, "focus") and target_cam.focus is not None:
-                try:
-                    target_cam.focus = float(target_cam.focus) * s
-                except Exception:
-                    # keep original if it can't be scaled
-                    pass
-            if hasattr(target_cam, "c") and target_cam.c is not None:
-                try:
-                    target_cam.c = np.asarray(target_cam.c, dtype=float) * s
-                except Exception:
-                    pass
+            # scale jacobian if present
+            if hasattr(tgt, "jacobian") and tgt.jacobian is not None:
+                tgt.jacobian = np.asarray(tgt.jacobian, dtype=float) * s
+                # update focus and principal point from new jacobian
+                tgt.focus = float(tgt.jacobian[0, 0])
+                tgt.c = np.array([tgt.jacobian[0, 2], tgt.jacobian[1, 2]])
+            else:
+                # fall back to scaling focus and c if jacobian isn't present
+                if hasattr(tgt, "focus") and tgt.focus is not None:
+                    tgt.focus = float(tgt.focus) * s
+                if hasattr(tgt, "c") and tgt.c is not None:
+                    tgt.c = np.asarray(tgt.c, dtype=float) * s
+            # recompute jacobian if required
+            if not hasattr(tgt, "jacobian") or tgt.jacobian is None:
+                tgt.jacobian = tgt.compute_jacobian()
+        else:
+            # if not scaling intrinsics, ensure jacobian reflects current focus/c
+            tgt.jacobian = tgt.compute_jacobian()
 
-        # recompute cached derived fields if Camera stores them
-        if hasattr(target_cam, "compute_rotation_matrix"):
-            try:
-                target_cam.rotation_matrix = target_cam.compute_rotation_matrix()
-            except Exception:
-                pass
-        if hasattr(target_cam, "compute_jacobian"):
-            try:
-                target_cam.jacobian = target_cam.compute_jacobian()
-            except Exception:
-                pass
+        # recompute rotation matrix (if rotation_angles modified elsewhere)
+        tgt.rotation_matrix = tgt.compute_rotation_matrix()
 
-        normalized.append(target_cam)
+        normalized.append(tgt)
 
     return normalized, s
 
