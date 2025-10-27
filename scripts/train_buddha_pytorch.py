@@ -233,6 +233,32 @@ def train_gaussian_renderer(
         optimizer.step()
         print(f"Step {step:03d}: loss={loss.item():.6f} ")
 
+        # =======================================================================
+        #                             DEBUG
+        #=========================================================================
+        # 1) Basic device + param counts
+        print("Device used:", device)
+        print("Renderer device (attempt):", next(renderer.parameters()).device if any(True for _ in renderer.parameters()) else "no parameters")
+        total_params = sum(p.numel() for p in renderer.parameters())
+        trainable_params = sum(p.numel() for p in renderer.parameters() if p.requires_grad)
+        print("Total params:", total_params, " Trainable params:", trainable_params)
+        
+        # 2) Dump named parameters (shape, device, requires_grad)
+        for name, p in renderer.named_parameters():
+            print(name, p.shape, p.device, "requires_grad=", p.requires_grad)
+        
+        # 3) Ensure optimizer has param groups
+        opt_params = sum(p.numel() for group in optimizer.param_groups for p in group['params'])
+        print("Params in optimizer:", opt_params)
+        
+        # 4) Quick forward pass device check
+        with torch.no_grad():
+            I_pred = renderer(blend_id=torch.tensor(blend_id_indices, device=device))
+        print("I_pred type/device:", type(I_pred), getattr(I_pred, "device", "no device"))
+        # =======================================================================
+        #                             DEBUG
+        #========================================================================
+
         if step % 10 == 0:
             for layer in renderer.blend_layers:
                 layer.sort_gaussians_by_distance()
