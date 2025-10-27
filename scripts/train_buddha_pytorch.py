@@ -32,7 +32,7 @@ def train_gaussian_renderer(
     rotate_image=True,
     rotate_image_on_load=True,  # new parameter
     normalize_camera_extrinsics=True,
-    gaussian_3d_eps=1e-6,
+    gaussian_eps=1e-6,
     camera_matrices_trainable=False,
     total_gaussians=1024,
     max_gaussians=128,
@@ -77,7 +77,7 @@ def train_gaussian_renderer(
     normalize_camera_extrinsics : bool, default=True
         Normalize camera extrinsics during preprocessing.
 
-    gaussian_3d_eps : float, default=1e-6
+    gaussian_eps : float, default=1e-6
         Small epsilon value for numerical stability in Gaussian operations.
 
     camera_matrices_trainable : bool, default=False
