@@ -65,7 +65,7 @@ class Gaussian3D(keras.layers.Layer):
             trainable=True, name='p_rot'
         )
         
-        if initializer == 'Uniform':
+        if mu_initializer == 'Uniform':
             # Trainable 3D mean (Uniform)
             self.mu = keras.Variable(
                 keras.initializers.RandomUniform(minval=-1.0, maxval=1.0)(
@@ -75,7 +75,7 @@ class Gaussian3D(keras.layers.Layer):
                 name='mu'
             )
         
-        elif initializer == 'Normal':
+        elif mu_initializer == 'Normal':
             # Trainable 3D mean (Normal)
             self.mu = keras.Variable(
                 keras.initializers.RandomNormal(stddev=0.5)(
@@ -86,7 +86,7 @@ class Gaussian3D(keras.layers.Layer):
             )
         
         else:
-            raise ValueError(f"Unknown initializer type: {initializer}")
+            raise ValueError(f"Unknown initializer type: {mu_initializer}")
 
         # Trainable Color
         self.rgb = keras.Variable(
