@@ -243,6 +243,7 @@ def train_gaussian_renderer(
                 rotation_gif_path = os.path.join(savepath, "rotation.gif")
                 render_gif(renderer=renderer, blend_id=0, res=render_size, radius=radius, steps=steps, save_path=rotation_gif_path, fps=fps)
             if savepath is not None:
+                pass
                 #main(input_folder=None, output_folder=savepath, save_cameras=True, save_gaussians=True, overwrite=False)
             if save_training_progress_examples:
                 filename = "preview.png"
