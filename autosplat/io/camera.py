@@ -18,13 +18,13 @@ def save_cameras_to_json(cameras, file_path):
     cam_data = []
     for cam in cameras:
         # Convert rotation matrix to quaternion
-        quat = R.from_matrix(cam.rotation_matrix).as_quat()  # [x, y, z, w]
+        quat = R.from_matrix(keras.ops.convert_to_numpy(cam.rotation_matrix)).as_quat()  # [x, y, z, w]
         cam_entry = {
-            "camera_id": cam.camera_id,
-            "location": cam.location.tolist(),
-            "rotation_quaternion": quat.tolist(),
-            "focus": cam.focus,
-            "c": cam.c.tolist()
+            "camera_id": int(cam.camera_id),
+            "location": keras.ops.convert_to_numpy(cam.location).tolist(),
+            "rotation_quaternion": keras.ops.convert_to_numpy(quat).tolist(),
+            "focus": keras.ops.convert_to_numpy(cam.focus),
+            "c": keras.ops.convert_to_numpy(cam.c).tolist()
         }
         cam_data.append(cam_entry)
 
