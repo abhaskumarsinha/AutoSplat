@@ -2,6 +2,7 @@ import json
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 from autosplat.core.camera import Camera
+import keras
 
 def save_cameras_to_json(cameras, file_path):
     """
