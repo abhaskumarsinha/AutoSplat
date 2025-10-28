@@ -131,6 +131,6 @@ class Camera(keras.layers.Layer):
     def __repr__(self):
         return (
             f"CameraLayer(ID={self.camera_id}, "
-            f"focus={self.focus.numpy():.4f}, c={self.c.numpy()}, "
+            f"focus={keras.ops.convert_to_numpy(self.focus):.4f}, c={keras.ops.convert_to_numpy(self.c)}, "
             f"train_focus={self.focus.trainable}, train_c={self.c.trainable})"
         )
