@@ -91,7 +91,6 @@ class Camera(keras.layers.Layer):
     def compute_jacobian(self):
         """Compute intrinsic Jacobian matrix."""
         f = self.focus
-        cx, cy = keras.ops.unstack(self.c)
         cx, cy = keras.ops.unstack(keras.ops.convert_to_tensor(self.c))
         J = keras.ops.stack([
             [f, 0.0, cx],
