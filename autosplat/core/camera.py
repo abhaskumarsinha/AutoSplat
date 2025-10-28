@@ -119,12 +119,10 @@ class Camera(keras.layers.Layer):
         config = super().get_config()
         config.update({
             "camera_id": self.camera_id,
-            "location": self.location.numpy().tolist(),
-            "rotation_angles": self.rotation_angles.numpy().tolist(),
-            "focus": float(self.focus.numpy()),
-            "c": self.c.numpy().tolist(),
-            "train_focus": self.focus.trainable,
-            "train_c": self.c.trainable,
+            "location": keras.ops.convert_to_numpy(self.location.tolist()),
+            "rotation_angles": keras.ops.convert_to_numpy(self.rotation_angles.tolist()),
+            "focus": float(keras.ops.convert_to_tensor(self.focus)),
+            "c": keras.ops.convert_to_tensor(self.c).tolist()
         })
         return config
     
@@ -134,6 +132,6 @@ class Camera(keras.layers.Layer):
         return (
             f"CameraLayer(ID={self.camera_id}, "
             f"focus={focus_val:.4f}, c={c_val.tolist()}, "
-            f"train_focus={self.focus.trainable}, train_c={self.c.trainable})"
+            f"train_focus={self.focus}, train_c={self.c})"
         )
 
