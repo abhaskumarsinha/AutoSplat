@@ -66,16 +66,8 @@ class BlenderLayer(keras.layers.Layer):
         if cam_J is None:
             raise ValueError("camera must have attribute 'jacobian' (intrinsics matrix)")
 
-        proj_2x3 = np.array(cam_J, dtype=np.float32)[:2, :3]
-        proj_tf = keras.ops.convert_to_tensor(proj_2x3, dtype='float32')
-
-        self.projection = self.add_weight(
-            name="projection",
-            shape=(2, 3),
-            dtype='float32',
-            initializer=keras.initializers.Constant(proj_tf),
-            trainable=camera_trainable,
-        )
+        proj_2x3 = cam_J[:2, :3]  # still in the graph, derived from trainable vars
+        self.projection = proj_2x3
 
         self.sort_gaussians_by_distance()
         self.alpha_blending = None
@@ -94,7 +86,7 @@ class BlenderLayer(keras.layers.Layer):
         for g in self.gaussians:
             mu_val = None
             try:
-                mu_val = g.mu.numpy()
+                mu_val = keras.ops.convert_to_numpy(g.mu)
             except Exception:
                 try:
                     mu_val = np.array(g.mu, dtype=np.float32)
