@@ -3,6 +3,11 @@ import sys, os
 # Get the absolute path to the project root (one level above "scripts")
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+import os
+
+# This guide can only be run with the torch backend.
+os.environ["KERAS_BACKEND"] = "torch"
+
 
 import os
 import argparse
