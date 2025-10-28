@@ -127,10 +127,13 @@ class Camera(keras.layers.Layer):
             "train_c": self.c.trainable,
         })
         return config
-
+    
     def __repr__(self):
+        focus_val = float(keras.ops.convert_to_numpy(self.focus))
+        c_val = keras.ops.convert_to_numpy(self.c)
         return (
             f"CameraLayer(ID={self.camera_id}, "
-            f"focus={keras.ops.convert_to_numpy(self.focus):.4f}, c={keras.ops.convert_to_numpy(self.c)}, "
+            f"focus={focus_val:.4f}, c={c_val.tolist()}, "
             f"train_focus={self.focus.trainable}, train_c={self.c.trainable})"
         )
+
