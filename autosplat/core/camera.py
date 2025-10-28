@@ -40,12 +40,12 @@ class Camera(keras.layers.Layer):
         self.camera_id = int(camera_id)
 
         # Non-trainable attributes
-        self.location = np.array(location)
-        self.rotation_angles = np.array(rotation_angles)
+        self.location = keras.ops.convert_to_tensor(location)
+        self.rotation_angles = keras.ops.convert_to_tensor(rotation_angles)
 
         # Trainable intrinsics
         self.focus = keras.Variable(
-            initializer=keras.initializers.Constant(focus),
+            focus,
             shape=(),
             dtype='float32',
             trainable=train_focus,
@@ -53,7 +53,7 @@ class Camera(keras.layers.Layer):
         )
 
         self.c = keras.Variable(
-            initializer=keras.initializers.Constant(c),
+            c,
             shape=(2,),
             dtype='float32',
             trainable=train_c,
