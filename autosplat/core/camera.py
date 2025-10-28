@@ -1,7 +1,7 @@
 import keras
 import numpy as np
 
-class CameraLayer(keras.layers.Layer):
+class Camera(keras.layers.Layer):
     """
     A differentiable pinhole camera model for 3D Gaussian splatting,
     implemented as a Keras Layer.
