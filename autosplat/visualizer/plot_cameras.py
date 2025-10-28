@@ -1,6 +1,7 @@
 import numpy as np
 import plotly.graph_objects as go
 from scipy.spatial.transform import Rotation as R
+import keras
 
 def plot_cameras_plotly(cameras, arrow_frac=0.15, pad_frac=0.2, fov=60):
     """
@@ -77,7 +78,7 @@ def plot_cameras_plotly(cameras, arrow_frac=0.15, pad_frac=0.2, fov=60):
     # --- Plot camera orientations ---
     for cam in cameras:
         pos = np.asarray(cam.location, dtype=float)
-        Rmat = R.from_euler('xyz', cam.rotation_angles).as_matrix()
+        Rmat = R.from_euler('xyz', keras.ops.convert_to_tensor(cam.rotation_angles)).as_matrix()
 
         right_vec = Rmat[:,0]
         up_vec = Rmat[:,1]
