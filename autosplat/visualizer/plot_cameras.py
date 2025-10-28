@@ -1,137 +1,138 @@
 import numpy as np
+import plotly.graph_objects as go
+from scipy.spatial.transform import Rotation as R
 
-
-
-# --- Safe imports for optional visualization dependencies ---
-try:
-    import plotly.graph_objects as go
-except ImportError as e:
-    raise ImportError(
-        "❌ Plotly is required for camera visualization. "
-        "Please install it via:\n    pip install plotly"
-    ) from e
-
-try:
-    from scipy.spatial.transform import Rotation as R
-except ImportError as e:
-    raise ImportError(
-        "❌ SciPy is required for camera visualization. "
-        "Please install it via:\n    pip install scipy"
-    ) from e
-
-
-
-
-
-def plot_cameras_plotly(cameras, arrow_frac=0.15, pad_frac=0.2):
+def plot_cameras_plotly(cameras, arrow_frac=0.15, pad_frac=0.2, fov=60):
     """
-    Robust Plotly 3D camera visualization for Colab.
-
+    Enhanced Plotly 3D camera visualization with clear orientation and frustum.
+    
     Args:
         cameras: list of Camera objects with .location (3,) and .rotation_angles (3,)
-        arrow_frac: fraction of scene diagonal that arrows will be (visible size)
-        pad_frac: extra padding fraction for axis ranges
+        arrow_frac: fraction of scene diagonal that arrows will be
+        pad_frac: padding around scene
+        fov: horizontal field of view (degrees) for frustum visualization
     """
-    # Collect positions
+    # --- Gather camera positions ---
     positions = np.array([np.asarray(cam.location, dtype=float) for cam in cameras])
     if positions.size == 0:
         raise ValueError("No cameras provided")
 
-    # Compute scene bounds and center
+    # --- Scene bounds and scaling ---
     mins = positions.min(axis=0)
     maxs = positions.max(axis=0)
-    center = (mins + maxs) / 2.0
     ranges = maxs - mins
-    max_range = max(ranges.max(), 1e-6)  # avoid zero
-
-    # Arrow length chosen as fraction of scene diagonal
-    arrow_len = arrow_frac * max_range
-
-    # Axis limits with padding
+    max_range = max(ranges.max(), 1e-6)
     pad = pad_frac * max_range
-    xlim = [mins[0] - pad + center[0] - center[0], maxs[0] + pad + center[0] - center[0]]
-    # above line keeps values relative — but simpler compute absolute:
+
     xlim = [mins[0] - pad, maxs[0] + pad]
     ylim = [mins[1] - pad, maxs[1] + pad]
     zlim = [mins[2] - pad, maxs[2] + pad]
 
+    arrow_len = arrow_frac * max_range
+
     fig = go.Figure()
 
-    # Plot camera positions
+    # --- Camera positions ---
     fig.add_trace(go.Scatter3d(
         x=positions[:,0], y=positions[:,1], z=positions[:,2],
         mode='markers+text',
         marker=dict(size=4, color='red'),
         text=[f"{cam.camera_id}" for cam in cameras],
         textposition="top center",
-        name="camera positions"
+        name="Camera centers"
     ))
 
-    # For each camera, plot orientation axes using Cone traces (R,G,B)
+    # --- Helper to draw frustum ---
+    def draw_camera_frustum(fig, pos, Rmat, fov, scale, color='blue'):
+        """Draws a simple wireframe pyramid showing camera FOV."""
+        z = scale
+        w = np.tan(np.deg2rad(fov / 2)) * z
+        h = w
+
+        corners = np.array([
+            [ w,  h, z],
+            [-w,  h, z],
+            [-w, -h, z],
+            [ w, -h, z],
+        ])
+
+        corners_world = (Rmat @ corners.T).T + pos
+
+        # Lines from camera to corners
+        for c in corners_world:
+            fig.add_trace(go.Scatter3d(
+                x=[pos[0], c[0]], y=[pos[1], c[1]], z=[pos[2], c[2]],
+                mode='lines', line=dict(color=color, width=2),
+                showlegend=False
+            ))
+
+        # Connect corners
+        idxs = [0,1,2,3,0]
+        fig.add_trace(go.Scatter3d(
+            x=corners_world[idxs,0], y=corners_world[idxs,1], z=corners_world[idxs,2],
+            mode='lines', line=dict(color=color, width=2),
+            showlegend=False
+        ))
+
+    # --- Plot camera orientations ---
     for cam in cameras:
         pos = np.asarray(cam.location, dtype=float)
-        # rotation matrix from Euler angles (ensure correct convention for your dataset)
         Rmat = R.from_euler('xyz', cam.rotation_angles).as_matrix()
 
-        # local axes vectors: x=right, y=up, z=forward (we'll take camera forward as -Z)
-        right_vec = Rmat[:,0]   # local +X
-        up_vec    = Rmat[:,1]   # local +Y
-        forward_vec = -Rmat[:,2]  # camera often looks along -Z; flip if needed
+        right_vec = Rmat[:,0]
+        up_vec = Rmat[:,1]
+        forward_vec = -Rmat[:,2]  # -Z is typically "look" direction
 
-        # normalize and scale to arrow_len
         def scaled(v):
-            v = np.asarray(v, dtype=float)
             n = np.linalg.norm(v)
-            if n < 1e-12:
-                return np.zeros(3)
-            return (v / n) * arrow_len
+            return (v / n) * arrow_len if n > 1e-12 else np.zeros(3)
 
         r_v = scaled(right_vec)
         u_v = scaled(up_vec)
         f_v = scaled(forward_vec)
 
-        # cones: anchor tail so they emanate from camera position
-        # sizeref controls cone head size relative to vector length; tune if needed
-        sizeref = arrow_len * 0.3 if arrow_len>0 else 0.1
+        sizeref = arrow_len * 0.3
 
-        # Right (red)
-        fig.add_trace(go.Cone(
-            x=[pos[0]], y=[pos[1]], z=[pos[2]],
-            u=[r_v[0]], v=[r_v[1]], w=[r_v[2]],
-            colorscale=[[0,'red'],[1,'red']],
-            showscale=False, sizemode="absolute", sizeref=sizeref, anchor="tail",
-            name=f"right {cam.camera_id}"
-        ))
-        # Up (green)
-        fig.add_trace(go.Cone(
-            x=[pos[0]], y=[pos[1]], z=[pos[2]],
-            u=[u_v[0]], v=[u_v[1]], w=[u_v[2]],
-            colorscale=[[0,'green'],[1,'green']],
-            showscale=False, sizemode="absolute", sizeref=sizeref, anchor="tail",
-            name=f"up {cam.camera_id}"
-        ))
-        # Forward (blue)
-        fig.add_trace(go.Cone(
-            x=[pos[0]], y=[pos[1]], z=[pos[2]],
-            u=[f_v[0]], v=[f_v[1]], w=[f_v[2]],
-            colorscale=[[0,'blue'],[1,'blue']],
-            showscale=False, sizemode="absolute", sizeref=sizeref, anchor="tail",
-            name=f"forward {cam.camera_id}"
+        # Local axes cones
+        for vec, color, label in [(r_v, 'red', 'right'), (u_v, 'green', 'up'), (f_v, 'blue', 'forward')]:
+            fig.add_trace(go.Cone(
+                x=[pos[0]], y=[pos[1]], z=[pos[2]],
+                u=[vec[0]], v=[vec[1]], w=[vec[2]],
+                colorscale=[[0, color], [1, color]],
+                showscale=False, sizemode="absolute", sizeref=sizeref,
+                anchor="tail", name=f"{label} {cam.camera_id}"
+            ))
+
+        # Long forward arrow for clarity
+        look_len = arrow_len * 3
+        look_dir = (forward_vec / np.linalg.norm(forward_vec)) * look_len
+        look_end = pos + look_dir
+        fig.add_trace(go.Scatter3d(
+            x=[pos[0], look_end[0]],
+            y=[pos[1], look_end[1]],
+            z=[pos[2], look_end[2]],
+            mode='lines',
+            line=dict(color='blue', width=6),
+            name=f"look_dir {cam.camera_id}",
+            showlegend=False
         ))
 
-    # set axis ranges and ensure equal aspect
+        # Draw frustum pyramid
+        draw_camera_frustum(fig, pos, Rmat, fov=fov, scale=arrow_len*2, color='blue')
+
+    # --- Layout ---
     fig.update_layout(
         scene=dict(
             xaxis=dict(range=xlim, title='X'),
             yaxis=dict(range=ylim, title='Y'),
             zaxis=dict(range=zlim, title='Z'),
-            aspectmode='data'   # important: equal scaling on all axes
+            aspectmode='data'
         ),
         width=900,
         height=800,
-        margin=dict(l=0,r=0,b=0,t=30),
+        margin=dict(l=0, r=0, b=0, t=40),
+        title="Camera positions and orientations (R=Right, G=Up, B=Forward)",
         showlegend=False
     )
 
-    fig.update_layout(title="Camera positions & orientations (R=red, G=up, B=forward)")
     fig.show()
