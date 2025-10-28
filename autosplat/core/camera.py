@@ -45,14 +45,14 @@ class Camera(keras.layers.Layer):
 
         # Trainable intrinsics
         self.focus = keras.Variable(
-            initial_value=keras.initializers.Constant(focus),
+            initializer=keras.initializers.Constant(focus),
             dtype='float32',
             trainable=train_focus,
             name=f"focus_{camera_id}"
         )
 
         self.c = keras.Variable(
-            initial_value=keras.initializers.Constant(c),
+            initializer=keras.initializers.Constant(c),
             dtype='float32',
             trainable=train_c,
             name=f"c_{camera_id}"
