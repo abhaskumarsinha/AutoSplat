@@ -1,351 +1,226 @@
 import os
+import re
 import numpy as np
 import imageio.v3 as iio
-from autosplat.core.camera import Camera  # Your Camera class
-from copy import deepcopy
-
-import os
-import numpy as np
-import imageio as iio
-from PIL import Image
-from scipy.linalg import rq
+from scipy.linalg import svd
 from scipy.spatial.transform import Rotation as R
-import re
+
+from autosplat.core import Camera
+
+def _read_par_file_safe(par_path):
+    entries = []
+    with open(par_path, 'r') as f:
+        for lineno, ln in enumerate(f, start=1):
+            s = ln.strip()
+            if not s:
+                continue
+            parts = s.split()
+            if len(parts) < 22:
+                print(f"par: skipping short line {lineno}: {s!r}")
+                continue
+            imgname = parts[0]
+            vals = list(map(float, parts[1:]))
+            K = np.array(vals[0:9]).reshape(3, 3)
+            Rmat = np.array(vals[9:18]).reshape(3, 3)
+            t = np.array(vals[18:21], dtype=float)
+            entries.append({'imgname': imgname, 'K': K, 'R': Rmat, 't': t})
+    print(f"par: parsed {len(entries)} valid entries from {par_path}")
+    return entries
+
+def _orthonormalize_R(Rmat):
+    U, s, Vt = svd(Rmat)
+    R_ortho = U @ Vt
+    if np.linalg.det(R_ortho) < 0:
+        U[:, -1] *= -1
+        R_ortho = U @ Vt
+    return R_ortho
 
 
-def normalize_camera(
-    cameras,
-    image_size=(256, 256),
-    world_box_min=(-1.0, -1.0, -1.0),
-    world_box_max=(1.0, 1.0, 1.0),
-    margin=0.05,
-    eps=1e-6,
-    verbose=False
+def import_temple_ring_to_cameras_fixed(
+    dataset_dir,
+    par_filename='templeR_par.txt',
+    target_image_size=None,   # e.g. (480,640) or None to keep native
+    normalize_world=True,
+    rotate_ccw: bool = False,   # <-- Counter-clockwise rotation
+    train_focus = True,
+    train_c = True,
+    verbose=True
 ):
     """
-    Adjust camera intrinsics (focus, principal point, jacobian) so that the unit
-    world box defined by world_box_min..world_box_max fits inside the image
-    frustum for each camera.
+    Import Temple ring dataset into Camera class list.
 
-    Modifies Camera objects in-place and returns meta {'image_size', 'margin'}.
-
-    Logic:
-      - compute the 8 corners of the world box
-      - for each camera:
-          - transform corners into camera coordinates: X_cam = R @ (X_world - cam.location)
-          - compute ratios rx = |x_cam / z_cam|, ry = |y_cam / z_cam|
-            (if z_cam <= eps it's clamped to eps to avoid div-by-zero)
-          - find max_rx, max_ry across corners
-          - set fx = (W/2) / (max_rx * (1+margin))  (so unit-box fills image with margin)
-            similarly fy = (H/2) / (max_ry * (1+margin))
-          - set cam.focus = (fx + fy) / 2
-          - set cam.c = (W/2, H/2)  (image center)
-          - update cam.jacobian accordingly and recompute dependent fields
-
-    Notes:
-      - If all z_cam for corners are <= 0 (camera inside box looking away), we
-        clamp z to eps to avoid massive focals; result may be unnatural for that camera.
-      - margin is fractional extra space (0.05 = 5% extra border).
+    rotate_ccw: if True, each image is rotated 90° counter-clockwise,
+                and intrinsics are updated accordingly.
     """
-    W, H = image_size[1], image_size[0]  # image_size is (H, W)
-    # prepare box corners
-    mins = np.asarray(world_box_min, dtype=float)
-    maxs = np.asarray(world_box_max, dtype=float)
-    corners = []
-    for xi in [mins[0], maxs[0]]:
-        for yi in [mins[1], maxs[1]]:
-            for zi in [mins[2], maxs[2]]:
-                corners.append(np.array([xi, yi, zi], dtype=float))
-    corners = np.stack(corners, axis=0)  # (8,3)
+    par_path = os.path.join(dataset_dir, par_filename)
+    if not os.path.exists(par_path):
+        raise FileNotFoundError(par_path)
 
-    for cam in cameras:
-        Rmat = cam.rotation_matrix  # 3x3, should map world->camera: X_cam = R @ (X_world - C)
-        C_world = cam.location       # camera center in world coords
+    entries = _read_par_file_safe(par_path)
 
-        # transform corners into camera coords
-        rel = corners - C_world[None, :]         # (8,3)
-        corners_cam = (Rmat @ rel.T).T           # (8,3)
-
-        xs = corners_cam[:, 0]
-        ys = corners_cam[:, 1]
-        zs = corners_cam[:, 2]
-
-        # clamp z to avoid division by zero and handle behind-camera points
-        zs_clamped = np.where(zs > eps, zs, eps)
-
-        # ratios
-        rx = np.abs(xs / zs_clamped)
-        ry = np.abs(ys / zs_clamped)
-
-        max_rx = np.max(rx)
-        max_ry = np.max(ry)
-
-        # If both are zero (camera extremely far or degenerate), fallback to small value:
-        if max_rx <= 0:
-            max_rx = eps
-        if max_ry <= 0:
-            max_ry = eps
-
-        # compute focal lengths in pixel units so that fx * max_rx == W/2 (half width)
-        fx = (W * 0.5) / (max_rx * (1.0 + margin))
-        fy = (H * 0.5) / (max_ry * (1.0 + margin))
-
-        # choose single focus scalar as average (keeps aspect)
-        f_new = float((fx + fy) / 2.0)
-
-        # set principal point to image center (you can preserve previous offset if you want)
-        cx_new = float(W * 0.5)
-        cy_new = float(H * 0.5)
-
-        # write back to Camera
-        cam.focus = f_new
-        cam.c = np.array([cx_new, cy_new], dtype=float)
-
-        # update jacobian format used elsewhere: [[f,0,cx],[0,f,cy],[0,0,1]]
-        cam.jacobian = np.array([
-            [cam.focus, 0.0, cam.c[0]],
-            [0.0, cam.focus, cam.c[1]],
-            [0.0, 0.0, 1.0]
-        ], dtype=float)
-
-        # ensure rotation_matrix is consistent (no change) and keep as-is
-        # If Camera has methods that rely on jacobian etc, recompute those if needed:
-        # If your Camera class had compute_jacobian() use that; but we set it directly.
-
-        if verbose:
-            print(f"Camera ID: {cam.camera_id}")
-            print(f"  max_rx={max_rx:.6g}, max_ry={max_ry:.6g}")
-            print(f"  set focus={cam.focus:.6g}, c=({cam.c[0]:.3f},{cam.c[1]:.3f})")
-            print(f"  location={cam.location}")
-            print()
-
-    meta = {'image_size': image_size, 'margin': margin}
-    return cameras, meta
-
-
-def decompose_projection_matrix(P):
-    """
-    Decompose 3x4 projection P into (K, R, C)
-    - K: 3x3 intrinsic (K[2,2] normalized to 1, diag positive)
-    - R: 3x3 rotation matrix
-    - C: 3-vector camera center in world coordinates
-    """
-    P = np.asarray(P, dtype=float)
-    if P.shape != (3, 4):
-        raise ValueError(f"Projection matrix must be (3,4), got {P.shape}")
-
-    M = P[:, :3].copy()
-    p4 = P[:, 3].copy()
-
-    # RQ decomposition (M = K @ R)
-    K, Rmat = rq(M)
-
-    # Force positive diagonal on K
-    diag_sign = np.sign(np.diag(K))
-    diag_sign[diag_sign == 0] = 1.0
-    T = np.diag(diag_sign)
-    K = K @ T
-    Rmat = T @ Rmat
-
-    # normalize so K[2,2] == 1
-    if K[2, 2] == 0:
-        raise RuntimeError("Invalid K (K[2,2] == 0)")
-    K = K / K[2, 2]
-
-    # camera center C = -R^T * (K^{-1} * p4)
-    t_cam = np.linalg.inv(K) @ p4
-    C = -Rmat.T @ t_cam
-
-    return K, Rmat, C
-
-
-def camera_from_decomposed(camera_id, K, Rmat, C):
-    """
-    Build Camera instance from decomposed parts.
-    `K` should already be the final intrinsics in pixel/normalized units
-    appropriate for the final resized image and world-scale.
-    """
-    fx = K[0, 0]
-    fy = K[1, 1]
-    # Use mean focal to produce a single scalar focus (preserves aspect roughly)
-    f = float((fx + fy) / 2.0)
-    cx = float(K[0, 2])
-    cy = float(K[1, 2])
-
-    rot = R.from_matrix(Rmat)
-    euler = rot.as_euler('xyz', degrees=False)
-
-    # Attempt to convert camera_id to int but fallback to string index
-    try:
-        cam_id_int = int(camera_id)
-    except Exception:
-        cam_id_int = camera_id
-
-    cam = Camera(
-        camera_id=cam_id_int,
-        location=C.astype(float),
-        rotation_angles=euler.astype(float),
-        focus=f,
-        c=(cx, cy)
-    )
-    return cam
-
-
-def normalize_camera_projection_list(P_list, camera_ids=None, image_scales=None, verbose=False):
-    """
-    Decompose all P in P_list, compute global centroid and scale so all camera centers lie
-    in [-1,1] (global cube). Scale intrinsics by image_scales (if provided) then by the
-    same world-scale factor so projection geometry is consistent.
-
-    Args:
-        P_list: list of (3,4) projection matrices (np.ndarray)
-        camera_ids: optional list of ids to use for Camera.camera_id
-        image_scales: optional list of (s_x, s_y) image resize scales for each camera.
-                      If None, assumes (1.0, 1.0) for each camera.
-
-    Returns:
-        cameras: list[Camera]
-        meta: dict with 'centroid' and 'scale'
-    """
-    n = len(P_list)
-    if camera_ids is None:
-        camera_ids = list(range(n))
-    if image_scales is None:
-        image_scales = [(1.0, 1.0)] * n
-
-    Ks = []
-    Rmats = []
-    Cs = []
-    for i, P in enumerate(P_list):
-        K, Rmat, C = decompose_projection_matrix(P)
-        Ks.append(K)
-        Rmats.append(Rmat)
-        Cs.append(C)
-
-    Cs = np.stack(Cs, axis=0)  # shape (N,3)
-
-    # compute centroid and scale so all camera centers fit in [-1,1]
-    centroid = Cs.mean(axis=0)
-    Cs_centered = Cs - centroid[None, :]
-    max_abs = np.max(np.abs(Cs_centered))
-    scale = 1.0 / max_abs if max_abs != 0 else 1.0
-
-    cameras = []
-    for i in range(n):
-        K_orig = Ks[i].copy()
-        Rmat = Rmats[i].copy()
-        C_orig = Cs[i].copy()
-
-        # apply image resize scale to K (does not change world center)
-        s_x, s_y = image_scales[i]
-        K_scaled = K_orig.copy()
-        K_scaled[0, 0] *= s_x  # fx
-        K_scaled[1, 1] *= s_y  # fy
-        K_scaled[0, 2] *= s_x  # cx
-        K_scaled[1, 2] *= s_y  # cy
-
-        # apply world normalization scale to intrinsics
-        K_scaled[0, 0] *= scale
-        K_scaled[1, 1] *= scale
-        K_scaled[0, 2] *= scale
-        K_scaled[1, 2] *= scale
-
-        # transform camera center into normalized coordinate frame
-        C_new = (C_orig - centroid) * scale
-
-        cam = camera_from_decomposed(camera_id=camera_ids[i], K=K_scaled, Rmat=Rmat, C=C_new)
-        cameras.append(cam)
-
-        if verbose:
-            print(f"[normalize] id={camera_ids[i]} orig_C={C_orig} -> C_new={C_new}, image_scale=({s_x:.4f},{s_y:.4f})")
-
-    meta = {'centroid': centroid, 'scale': scale}
-    return cameras, meta
-
-
-def _extract_base_name_from_image(img_file: str) -> str:
-    """
-    Robustly extract the base name for camera file mapping from an image filename.
-    Handles cases like:
-      - 00001_c.png
-      - 00001._c.png
-      - 00001_c.JPG
-      - weird.extra.00001._c.png
-    Returns the base name without any trailing dots.
-    """
-    # look for the last occurrence of "_c" (case-insensitive)
-    lower = img_file.lower()
-    pos = lower.rfind('_c')
-    if pos != -1:
-        base = img_file[:pos]
-    else:
-        # fallback: remove the extension, then strip last underscore-group
-        base = os.path.splitext(img_file)[0]
-        # if there is an underscore, assume last underscore separates id from suffix
-        if '_' in base:
-            base = base.rsplit('_', 1)[0]
-
-    # remove any stray trailing dots that created the "00001." situation
-    base = base.rstrip('.')
-    return base
-
-def load_dataset(folder, image_size=(256, 256), skip_seeds=True, rotate_images=False):
-    """
-    Load images and normalized cameras from dataset folder.
-
-    Returns:
-        images (list[np.ndarray]), cameras (list[Camera])
-    """
     images = []
-    P_list = []
-    ids = []
+    cameras = []
+    centers = []
     image_scales = []
+    orig_h = orig_w = None
+    new_h = new_w = None
 
-    files = sorted(os.listdir(folder))
-
-    # find image files (endswith like '_c.<ext>' case-insensitive)
-    img_files = [f for f in files if re.search(r'[_\.]c\.[A-Za-z0-9]+$', f)]
-    if skip_seeds:
-        img_files = [f for f in img_files if '_seeds' not in f.lower()]
-
-    for img_file in img_files:
-        base_name = _extract_base_name_from_image(img_file)
-        cam_file = os.path.join(folder, f"{base_name}_P.txt")
-        img_path = os.path.join(folder, img_file)
-
+    for idx, ent in enumerate(entries):
+        imgname = ent['imgname']
+        img_path = os.path.join(dataset_dir, imgname)
         if not os.path.exists(img_path):
-            # safety: skip missing images (should not happen normally)
+            if verbose:
+                print(f"Warning: image {img_path} missing — skipping")
             continue
 
-        # Load image
         img = iio.imread(img_path)
-        if rotate_images:
-            img = np.rot90(img, k=-1)
-
+        if img.ndim == 2:
+            img = np.stack([img]*3, axis=-1)
         orig_h, orig_w = img.shape[:2]
-        new_h, new_w = image_size
 
-        if (orig_h, orig_w) != (new_h, new_w):
-            img = np.array(Image.fromarray(img).resize((new_w, new_h), Image.BILINEAR))
+        # --- resize if requested ---
+        if target_image_size is not None:
+            new_h, new_w = target_image_size
+            if (orig_h, orig_w) != (new_h, new_w):
+                from PIL import Image
+                img = np.asarray(Image.fromarray(img).resize((new_w, new_h), Image.BILINEAR))
+                s_x = new_w / float(orig_w)
+                s_y = new_h / float(orig_h)
+            else:
+                s_x = s_y = 1.0
+        else:
+            new_h, new_w = orig_h, orig_w
+            s_x = s_y = 1.0
+
+        # --- optional 90° counter-clockwise rotation ---
+        if rotate_ccw:
+            img = np.rot90(img, k=1)  # CCW rotation
+            H_before, W_before = new_h, new_w
+            new_h, new_w = img.shape[:2]
 
         images.append(img)
-
-        if not os.path.exists(cam_file):
-            raise FileNotFoundError(f"Expected camera file {cam_file} for image {img_path}")
-
-        P = np.loadtxt(cam_file)
-        if P.shape != (3, 4):
-            raise ValueError(f"Unexpected camera shape {P.shape} in {cam_file}")
-
-        P_list.append(P)
-        ids.append(base_name)
-        s_x = float(new_w) / float(orig_w)
-        s_y = float(new_h) / float(orig_h)
         image_scales.append((s_x, s_y))
 
-    if len(P_list) == 0:
-        return images, []
+        # --- intrinsics & extrinsics from par file ---
+        K = ent['K'].astype(float).copy()
+        Rfile = ent['R'].astype(float).copy()
+        t = ent['t'].astype(float).copy()
 
-    cameras, meta = normalize_camera_projection_list(P_list, camera_ids=ids, image_scales=image_scales)
-    return images, cameras
+        # normalize K
+        if abs(K[2,2]) < 1e-12:
+            raise RuntimeError("Invalid K[2,2] == 0")
+        K = K / K[2,2]
+
+        R_ortho = _orthonormalize_R(Rfile)
+        if np.linalg.det(R_ortho) < 0:
+            R_ortho = -R_ortho
+            K = -K
+
+        C = -R_ortho.T @ t
+        centers.append(C)
+
+        R_cam2world = R_ortho.T
+        euler = R.from_matrix(R_cam2world).as_euler('xyz', degrees=False)
+
+        # apply scaling
+        K_scaled = K.copy()
+        K_scaled[0,0] *= s_x
+        K_scaled[1,1] *= s_y
+        K_scaled[0,2] *= s_x
+        K_scaled[1,2] *= s_y
+
+        # --- if rotated CCW, update K ---
+        if rotate_ccw:
+            # For 90° CCW rotation:
+            # u' = v
+            # v' = -u + (W_before - 1)
+            M = np.array([[0.0,  1.0, 0.0],
+                          [-1.0, 0.0, float(W_before - 1)],
+                          [0.0,  0.0, 1.0]], dtype=float)
+            K_scaled = M @ K_scaled
+
+        fx = float(K_scaled[0,0])
+        fy = float(K_scaled[1,1])
+        f_mean = (fx + fy) / 2.0
+        cx = float(K_scaled[0,2])
+        cy = float(K_scaled[1,2])
+
+        m = re.search(r'(\d+)', imgname)
+        cam_id = int(m.group(1)) if m else idx
+
+        cam = Camera(
+            camera_id=cam_id,
+            location=tuple(C.tolist()),
+            rotation_angles=tuple(euler.tolist()),
+            focus=f_mean,
+            c=(cx, cy),
+            train_focus = train_focus,
+            train_c = train_c
+        )
+        cam._K_scaled = K_scaled
+        cameras.append(cam)
+
+    if len(cameras) == 0:
+        return images, [], {'orig_image_size': None}
+
+    # --- normalize world (scale only camera centers) ---
+    centers = np.stack(centers, axis=0)
+    centroid = centers.mean(axis=0)
+    max_abs = np.max(np.abs(centers - centroid))
+    scale_world = 1.0 / max_abs if max_abs > 0 else 1.0
+
+    if normalize_world:
+        for cam in cameras:
+            cam.location = (cam.location.detach().cpu().numpy() - centroid) * scale_world
+            K_s = cam._K_scaled
+            fx = float(K_s[0,0])
+            fy = float(K_s[1,1])
+            cam.focus = (fx + fy) / 2.0
+            cam.c = np.array([float(K_s[0,2]), float(K_s[1,2])])
+            cam.jacobian = cam.compute_jacobian()
+            cam.rotation_matrix = cam.compute_rotation_matrix()
+            del cam._K_scaled
+    else:
+        for cam in cameras:
+            K_s = cam._K_scaled
+            fx = float(K_s[0,0])
+            fy = float(K_s[1,1])
+            cam.focus = (fx + fy) / 2.0
+            cam.c = np.array([float(K_s[0,2]), float(K_s[1,2])])
+            cam.jacobian = cam.compute_jacobian()
+            cam.rotation_matrix = cam.compute_rotation_matrix()
+            del cam._K_scaled
+
+    meta = {
+        'num_views': len(cameras),
+        'orig_image_size': (orig_h, orig_w),
+        'target_image_size': (new_h, new_w),
+        'centroid': centroid,
+        'scale_world': scale_world,
+        'rotated_images': bool(rotate_ccw)
+    }
+
+    if verbose:
+        print(f"Loaded {len(cameras)} cameras and {len(images)} images.")
+        print(f"World centroid = {centroid}, world scale factor applied = {scale_world:.6g}")
+        if rotate_ccw:
+            print("Images were rotated 90° counter-clockwise; intrinsics updated accordingly.")
+
+    return images, cameras, meta
+
+
+
+def shift_world_centroid_to_zero(cameras):
+    """
+    Translate camera locations so the centroid of all camera centers becomes exactly (0,0,0).
+    This function does NOT change intrinsics (focus, c) or rotation.
+    """
+    if len(cameras) == 0:
+        return cameras, np.zeros(3)
+
+    centers = np.stack([cam.location for cam in cameras], axis=0)  # (N,3)
+    centroid = centers.mean(axis=0)
+    for cam in cameras:
+        cam.location = np.array(cam.location) - centroid
+    return cameras, centroid
 
