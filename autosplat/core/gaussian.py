@@ -54,20 +54,20 @@ class Gaussian3D(keras.layers.Layer):
         self.eps = float(eps)
 
         # Trainable diagonal scales (sigma)
-        self.s = keras.Variable(
+        self.s = self.add_weight(
             initializer=keras.initializers.RandomUniform(minval=0.05, maxval=0.2)(shape=(3,), dtype='float32'),
             trainable=True, name='s_scale'
         )
 
         # Trainable quaternion parameters (small init -> near identity)
-        self.p = keras.Variable(
+        self.p = self.add_weight(
             initializer=keras.initializers.RandomUniform(minval=-0.05, maxval=0.05)(shape=(4,), dtype='float32'),
             trainable=True, name='p_rot'
         )
         
         if mu_initializer == 'random_uniform':
             # Trainable 3D mean (Uniform)
-            self.mu = keras.Variable(
+            self.mu = self.add_weight(
                 keras.initializers.RandomUniform(minval=-1.0, maxval=1.0)(
                     shape=(3,), dtype='float32'
                 ),
@@ -77,7 +77,7 @@ class Gaussian3D(keras.layers.Layer):
         
         elif mu_initializer == 'random_normal':
             # Trainable 3D mean (Normal)
-            self.mu = keras.Variable(
+            self.mu = self.add_weight(
                 keras.initializers.RandomNormal(stddev=0.5)(
                     shape=(3,), dtype='float32'
                 ),
@@ -89,13 +89,13 @@ class Gaussian3D(keras.layers.Layer):
             raise ValueError(f"Unknown initializer type: {mu_initializer}")
 
         # Trainable Color
-        self.rgb = keras.Variable(
+        self.rgb = self.add_weight(
             initializer=keras.initializers.RandomUniform(minval=-1.0, maxval=1.0)(shape=(3,), dtype='float32'),
             trainable=True, name='rgb'
         )
 
         # Trainable Alpha (opacity)
-        self.alpha = keras.Variable(
+        self.alpha = self.add_weight(
             initializer=keras.initializers.RandomUniform(minval=0.7, maxval=1.0)(shape=(1,), dtype='float32'),
             trainable=True, name='alpha'
         )
