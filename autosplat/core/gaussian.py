@@ -53,24 +53,24 @@ class Gaussian3D(keras.layers.Layer):
         super().__init__(**kwargs)
         self.eps = float(eps)
 
-        # Trainable diagonal scales (sigma)
         self.s = self.add_weight(
-            initializer=keras.initializers.RandomUniform(minval=0.05, maxval=0.2)(shape=(3,), dtype='float32'),
+            shape=(3,),
+            initializer=keras.initializers.RandomUniform(minval=0.05, maxval=0.2),
             trainable=True, name='s_scale'
         )
 
         # Trainable quaternion parameters (small init -> near identity)
         self.p = self.add_weight(
-            initializer=keras.initializers.RandomUniform(minval=-0.05, maxval=0.05)(shape=(4,), dtype='float32'),
+            shape=(4,),
+            initializer=keras.initializers.RandomUniform(minval=-0.05, maxval=0.05),
             trainable=True, name='p_rot'
         )
         
         if mu_initializer == 'random_uniform':
             # Trainable 3D mean (Uniform)
             self.mu = self.add_weight(
-                keras.initializers.RandomUniform(minval=-1.0, maxval=1.0)(
-                    shape=(3,), dtype='float32'
-                ),
+                shape=(3,),
+                initializer=keras.initializers.RandomUniform(minval=-1.0, maxval=1.0),
                 trainable=True,
                 name='mu'
             )
@@ -78,9 +78,8 @@ class Gaussian3D(keras.layers.Layer):
         elif mu_initializer == 'random_normal':
             # Trainable 3D mean (Normal)
             self.mu = self.add_weight(
-                keras.initializers.RandomNormal(stddev=0.5)(
-                    shape=(3,), dtype='float32'
-                ),
+                shape=(3,),
+                initializer=keras.initializers.RandomNormal(stddev=0.5),
                 trainable=True,
                 name='mu'
             )
@@ -90,15 +89,18 @@ class Gaussian3D(keras.layers.Layer):
 
         # Trainable Color
         self.rgb = self.add_weight(
-            initializer=keras.initializers.RandomUniform(minval=-1.0, maxval=1.0)(shape=(3,), dtype='float32'),
+            shape=(3,),
+            initializer=keras.initializers.RandomUniform(minval=-1.0, maxval=1.0),
             trainable=True, name='rgb'
         )
 
         # Trainable Alpha (opacity)
         self.alpha = self.add_weight(
-            initializer=keras.initializers.RandomUniform(minval=0.7, maxval=1.0)(shape=(1,), dtype='float32'),
+            shape=(1,),
+            initializer=keras.initializers.RandomUniform(minval=0.7, maxval=1.0),
             trainable=True, name='alpha'
         )
+
 
         # Optional default projection J (2×3)
         self.use_default_projection = bool(use_default_projection)
