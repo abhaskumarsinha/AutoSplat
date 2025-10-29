@@ -33,7 +33,7 @@ class Gaussian3D(keras.layers.Layer):
       the 3D mean. "Uniform" samples from [-1, 1], "Normal" uses stddev = 0.5.
     """
 
-    def __init__(self, eps=1e-6, use_default_projection=True, mu_initializer='random_uniform', max_value = 0.1, **kwargs):
+    def __init__(self, eps=1e-6, use_default_projection=True, mu_initializer='random_uniform', max_s_value = 0.1, min_s_value = 0.05, **kwargs):
         """
         Initialize a 3D Gaussian.
 
@@ -55,7 +55,7 @@ class Gaussian3D(keras.layers.Layer):
 
         # Trainable diagonal scales (sigma)
         self.s = keras.Variable(
-            initializer=keras.initializers.RandomUniform(minval=0.05, maxval=0.2)(shape=(3,), dtype='float32', constraint=keras.constraints.MaxNorm(max_value)),
+            initializer=keras.initializers.RandomUniform(minval=0.05, maxval=0.2)(shape=(3,), dtype='float32'),
             trainable=True, name='s_scale'
         )
 
@@ -106,6 +106,8 @@ class Gaussian3D(keras.layers.Layer):
             [[1., 0., 0.],
              [0., 1., 0.]], dtype='float32', trainable=False
         )
+
+        self.s_min, self.s_max = min_s_value, max_s_value
 
     def quaternion_to_rotation(self, p):
         """
@@ -192,6 +194,8 @@ class Gaussian3D(keras.layers.Layer):
         translation = keras.ops.convert_to_tensor(translation, dtype='float32')
         if tuple(translation.shape) != (3,):
             raise ValueError("translation must be shape (3,)")
+
+        self.s = self.s_min + (self.s_max - self.s_min) * keras.ops.sigmoid(self.s)
 
         R_train = self.quaternion_to_rotation(self.p)
         R_total = keras.ops.matmul(rotation_ext, R_train)
