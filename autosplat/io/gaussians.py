@@ -65,11 +65,11 @@ def save_gaussians_to_json(gaussians, json_path):
 
     for g in gaussians:
         gdata = {
-            "mu": g.mu.numpy().tolist(),
-            "rgb": g.rgb.numpy().tolist(),
-            "alpha": float(g.alpha.numpy()[0]),
-            "scale": g.s.numpy().tolist(),
-            "rotation": g.p.numpy().tolist()
+            "mu": keras.ops.convert_to_numpy(g.mu).tolist(),
+            "rgb": keras.ops.convert_to_numpy(g.rgb).tolist(),
+            "alpha": float(keras.ops.convert_to_numpy(g.alpha)[0]),
+            "scale": keras.ops.convert_to_numpy(g.s).tolist(),
+            "rotation": keras.ops.convert_to_numpy(g.p).tolist()
         }
         data["gaussians"].append(gdata)
 
