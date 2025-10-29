@@ -26,21 +26,22 @@ class Camera(keras.layers.Layer):
         self.rotation_angles = keras.ops.convert_to_tensor(rotation_angles)
 
         # Trainable intrinsics
-        self.focus = keras.Variable(
-            focus,
+        self.focus = self.add_weight(
             shape=(),
+            initializer=keras.initializers.Constant(focus),
             dtype="float32",
             trainable=train_focus,
             name=f"focus_{camera_id}",
         )
 
-        self.c = keras.Variable(
-            c,
+        self.c = self.add_weight(
             shape=(2,),
+            initializer=keras.initializers.Constant(c),
             dtype="float32",
             trainable=train_c,
             name=f"c_{camera_id}",
         )
+
 
         # Derived quantities
         self.rotation_matrix = self.compute_rotation_matrix()
