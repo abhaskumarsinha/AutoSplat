@@ -55,7 +55,7 @@ class Gaussian3D(keras.layers.Layer):
 
         # Trainable diagonal scales (sigma)
         self.s = keras.Variable(
-            initializer=keras.initializers.RandomUniform(minval=0.05, maxval=0.2)(shape=(3,), dtype='float32', kernel_constraint=keras.constraints.MaxNorm(max_value)),
+            initializer=keras.initializers.RandomUniform(minval=0.05, maxval=0.2)(shape=(3,), dtype='float32', constraint=keras.constraints.MaxNorm(max_value)),
             trainable=True, name='s_scale'
         )
 
