@@ -33,6 +33,8 @@ def parse_args():
     parser.add_argument('--default_c', type=tuple, default=(0.0, 0.0))
     parser.add_argument('--camera_trainable', type=bool, default=True)
     parser.add_argument('--max_gaussians', type=int, default=32)
+    parser.add_argument('--max_s_value', type=float, default=0.3)
+    parser.add_argument('--min_s_value', type=float, default=0.05)
     parser.add_argument('--background_color', type=tuple, default=(-1.0, -1.0, -1.0))
     parser.add_argument('--image_size', type=tuple, default=(64, 64))
     parser.add_argument('--depth_loss_ratio', type=float, default=0.5)
@@ -95,7 +97,7 @@ def main():
     # Initialize Gaussians
     # ---------------------------
     logger.info(f"🎨 Initializing {args.total_gaussians} Gaussians...")
-    g = [Gaussian3D(args.eps_gaussian, True, args.mu_initializer) for _ in range(args.total_gaussians)]
+    g = [Gaussian3D(args.eps_gaussian, True, args.mu_initializer, max_s_value=args.max_s_value, min_s_value=args.min_s_value) for _ in range(args.total_gaussians)]
 
     for cam in cameras:
         cam.focus = args.default_focus
