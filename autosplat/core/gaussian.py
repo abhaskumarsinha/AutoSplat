@@ -33,7 +33,7 @@ class Gaussian3D(keras.layers.Layer):
       the 3D mean. "Uniform" samples from [-1, 1], "Normal" uses stddev = 0.5.
     """
 
-    def __init__(self, eps=1e-6, use_default_projection=True, mu_initializer='random_uniform', **kwargs):
+    def __init__(self, eps=1e-6, use_default_projection=True, mu_initializer='random_uniform', max_value = 0.5, **kwargs):
         """
         Initialize a 3D Gaussian.
 
@@ -55,7 +55,7 @@ class Gaussian3D(keras.layers.Layer):
 
         # Trainable diagonal scales (sigma)
         self.s = keras.Variable(
-            initializer=keras.initializers.RandomUniform(minval=0.05, maxval=0.2)(shape=(3,), dtype='float32'),
+            initializer=keras.initializers.RandomUniform(minval=0.05, maxval=0.2)(shape=(3,), dtype='float32', kernel_constraintkeras.constraints.MaxNorm(max_value)),
             trainable=True, name='s_scale'
         )
 
