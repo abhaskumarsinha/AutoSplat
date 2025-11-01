@@ -93,10 +93,10 @@ def main():
     # Load Dataset
     # ---------------------------
     logger.info(f"📂 Loading dataset from: {args.dataset_dir}")
-    cams, names, gaussians = build_layers_from_colmap(sparse_dir, images_dir, max_cameras=50, max_points=5000)
+    cams, names, gaussians = build_layers_from_colmap(args.colmap_dir, args.dataset_dir, max_cameras=50, max_points=5000)
     logger.info(f"📸 Loaded {len(cameras)} cameras, {len(gaussians)} gaussians and {len(names)} images.")
 
-    images = load_images_from_list('/content/AutoSplat/templeRing', names, (64, 64), True)
+    images = load_images_from_list(args.dataset_dir, names, (64, 64), True)
     images = keras.ops.convert_to_tensor(images)
 
 
