@@ -17,6 +17,10 @@ import logging
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
+# ----------- TEMP ----------------
+from scripts.colmap_import import *
+$ ---------------------------------
+
 
 # ---------------------------
 # Argument Parser
@@ -25,6 +29,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="AutoSplat Trainer Script")
 
     parser.add_argument('--dataset_dir', type=str, required=True, help='Path to dataset directory.')
+    parser.add_argument('--colmap_dir', type=str, required=True, help='Path to COLMAP Model export.')
     parser.add_argument('--rotate_ccw', type=bool, default=True, help='Rotate temple images counter-clockwise.')
     parser.add_argument('--total_gaussians', type=int, default=32)
     parser.add_argument('--eps_gaussian', type=float, default=1e-6)
@@ -88,18 +93,16 @@ def main():
     # Load Dataset
     # ---------------------------
     logger.info(f"📂 Loading dataset from: {args.dataset_dir}")
-    images, cameras, meta = import_temple_ring_to_cameras_fixed(args.dataset_dir, rotate_ccw=args.rotate_ccw)
-    cameras, _ = shift_world_centroid_to_zero(cameras)
-    logger.info(f"📸 Loaded {len(cameras)} cameras and {len(images)} images.")
-    logger.debug(f"Metadata: {meta}")
+    cams, names, gaussians = build_layers_from_colmap(sparse_dir, images_dir, max_cameras=50, max_points=5000)
+    logger.info(f"📸 Loaded {len(cameras)} cameras, {len(gaussians)} gaussians and {len(images)} images.")
 
-    # ---------------------------
-    # Initialize Gaussians
-    # ---------------------------
-    logger.info(f"🎨 Initializing {args.total_gaussians} Gaussians...")
-    g = [Gaussian3D(args.eps_gaussian, True, args.mu_initializer, max_s_value=args.max_s_value, min_s_value=args.min_s_value) for _ in range(args.total_gaussians)]
 
-    for cam in cameras:
+    center, scale = compute_scene_normalization(gaussians, cams)
+    normalize_scene(gaussians, cams, center, scale)
+
+    gaussians = random.sample(gaussians, 1000)
+
+    for cam in cams:
         cam.focus = args.default_focus
         cam.c = args.default_c
         cam.jacobian = cam.compute_jacobian()
@@ -109,9 +112,10 @@ def main():
     # Scenes and Renderer
     # ---------------------------
     logger.info("🧩 Building scenes and renderer...")
-    scenes = [BlenderLayer(cam, g, args.camera_trainable, args.max_gaussians, args.background_color)
-              for cam in cameras]
-    renderer = RenderObject(scenes, args.image_size)
+    scenes = []
+    for cam in cams:
+        scenes.append(BlenderLayer(cam, gaussians, True, args.max_gaussians, (-1.0, -1.0, -1.0)))
+    renderer = RenderObject(scenes, (64, 64))
 
     # ---------------------------
     # Device Setup
