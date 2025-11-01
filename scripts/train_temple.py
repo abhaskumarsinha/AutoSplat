@@ -186,7 +186,7 @@ def main():
     logger.info(f"🚀 Starting training for {args.epochs} epochs...")
     for step in tqdm(range(args.epochs), desc="Training"):
         if step % args.save_model_freq == 0:
-            save_gaussians_to_json(g, args.json_gaussians_filepath)
+            save_gaussians_to_json(gussians, args.json_gaussians_filepath)
             logger.info(f"💾 Saved Gaussians to {args.json_gaussians_filepath} at step {step}")
 
         optimizer.zero_grad()
