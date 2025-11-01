@@ -229,13 +229,13 @@ def compute_scene_normalization(gaussians, cameras):
     # Collect Gaussian centers (mu)
     for g in gaussians:
         if hasattr(g.mu, "numpy"):
-            all_points.append(g.mu.numpy())
+            all_points.append(keras.ops.convert_to_numpy(g.mu))
         else:
             all_points.append(np.array(g.mu))
 
     # Collect camera locations
     for c in cameras:
-        loc = c.location.numpy() if hasattr(c.location, "numpy") else np.array(c.location)
+        loc = keras.ops.convert_to_numpy(c.location) if hasattr(c.location, "numpy") else np.array(c.location)
         all_points.append(loc)
 
     all_points = np.array(all_points)
