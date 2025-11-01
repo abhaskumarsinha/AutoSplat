@@ -5,6 +5,9 @@ import keras
 from scipy.spatial.transform import Rotation as R
 import random
 
+from autosplat.cameras import Camera
+from autosplat.gaussians import Gaussian3D
+
 
 def read_cameras_txt(path):
     cams = {}
