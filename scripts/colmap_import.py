@@ -267,3 +267,61 @@ def normalize_scene(gaussians, cameras, center, scale):
             c.location.assign((c.location - center) * scale)
         else:
             c.location = (np.array(c.location) - center) * scale
+
+
+import os
+import numpy as np
+from PIL import Image
+
+def load_images_from_list(dir_path, image_names, resize=None, rotate_90=False):
+    """
+    Load a list of images from a directory in the given order and return as a NumPy tensor.
+
+    Parameters:
+    -----------
+    dir_path : str
+        Path to the directory containing the images.
+    image_names : list of str
+        List of image filenames to load (in order).
+    resize : tuple(int, int) or None
+        Optional (height, width) to resize images to. If None, keep original size.
+    rotate_90 : bool
+        If True, rotate each image 90 degrees clockwise.
+
+    Returns:
+    --------
+    np.ndarray
+        Numpy array of shape (N, H, W, C) with float32 normalized pixel values [0, 1].
+    """
+    images = []
+
+    for name in image_names:
+        path = os.path.join(dir_path, name)
+        if not os.path.exists(path):
+            print(f"[WARN] Image not found: {path}")
+            continue
+
+        try:
+            img = Image.open(path).convert("RGB")
+
+            # Rotate 90 degrees clockwise if requested
+            if rotate_90:
+                img = img.transpose(Image.ROTATE_270)  # 270° CCW == 90° CW
+
+            # Resize if requested
+            if resize is not None:
+                img = img.resize((resize[1], resize[0]), Image.BICUBIC)
+
+            # Convert to normalized float32 NumPy array
+            img_np = np.asarray(img, dtype=np.float32) / 255.0
+            images.append(img_np)
+
+        except Exception as e:
+            print(f"[ERROR] Could not load {path}: {e}")
+            continue
+
+    if not images:
+        raise ValueError("No images were loaded. Check file paths or formats.")
+
+    return np.stack(images, axis=0) / 255.0
+
