@@ -103,7 +103,7 @@ def main():
     center, scale = compute_scene_normalization(gaussians, cams)
     normalize_scene(gaussians, cams, center, scale)
 
-    gaussians = random.sample(gaussians, 1000)
+    gaussians = random.sample(gaussians, 512)
 
     for cam in cams:
         cam.focus = args.default_focus
