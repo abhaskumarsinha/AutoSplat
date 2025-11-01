@@ -204,9 +204,66 @@ def build_layers_from_colmap(
 
     return camera_layers, image_names, gaussian_layers
 
+def compute_scene_normalization(gaussians, cameras):
+    """
+    Compute a normalization transform so that all 3D points and camera locations
+    fit roughly within [-1, 1] cube.
 
-if __name__ == "__main__":
-    # Example usage
-    sparse_dir = "./"          # folder with cameras.txt, images.txt, points3D.txt
-    images_dir = "/content/AutoSplat/templeRing"          # optional: folder with original JPGs
-    cams, names, gaussians = build_layers_from_colmap(sparse_dir, images_dir, max_cameras=50, max_points=5000)
+    Parameters
+    ----------
+    gaussians : list of Gaussian3D
+    cameras : list of Camera
+
+    Returns
+    -------
+    center : np.ndarray, shape (3,)
+        Mean center of the scene.
+    scale : float
+        Scaling factor such that the longest side fits to [-1, 1].
+    """
+    all_points = []
+
+    # Collect Gaussian centers (mu)
+    for g in gaussians:
+        if hasattr(g.mu, "numpy"):
+            all_points.append(g.mu.numpy())
+        else:
+            all_points.append(np.array(g.mu))
+
+    # Collect camera locations
+    for c in cameras:
+        loc = c.location.numpy() if hasattr(c.location, "numpy") else np.array(c.location)
+        all_points.append(loc)
+
+    all_points = np.array(all_points)
+    center = np.mean(all_points, axis=0)
+    max_extent = np.max(np.linalg.norm(all_points - center, axis=1))
+    scale = 1.0 / max_extent  # scale to roughly fit in unit ball
+
+    return center, scale
+
+
+def normalize_scene(gaussians, cameras, center, scale):
+    """
+    Apply normalization (translate + scale) to all Gaussians and Cameras.
+
+    Modifies in place.
+
+    Parameters
+    ----------
+    center : (3,)
+        Scene centroid to subtract.
+    scale : float
+        Scaling factor.
+    """
+    for g in gaussians:
+        if hasattr(g.mu, "assign"):
+            g.mu.assign((g.mu - center) * scale)
+        else:
+            g.mu = (np.array(g.mu) - center) * scale
+
+    for c in cameras:
+        if hasattr(c.location, "assign"):
+            c.location.assign((c.location - center) * scale)
+        else:
+            c.location = (np.array(c.location) - center) * scale
