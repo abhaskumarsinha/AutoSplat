@@ -94,7 +94,7 @@ def main():
     # ---------------------------
     logger.info(f"📂 Loading dataset from: {args.dataset_dir}")
     cams, names, gaussians = build_layers_from_colmap(args.colmap_dir, args.dataset_dir, max_cameras=50, max_points=5000)
-    logger.info(f"📸 Loaded {len(cameras)} cameras, {len(gaussians)} gaussians and {len(names)} images.")
+    logger.info(f"📸 Loaded {len(cams)} cameras, {len(gaussians)} gaussians and {len(names)} images.")
 
     images = load_images_from_list(args.dataset_dir, names, (64, 64), True)
     images = keras.ops.convert_to_tensor(images)
