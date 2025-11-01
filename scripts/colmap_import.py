@@ -269,7 +269,7 @@ def normalize_scene(gaussians, cameras, center, scale):
         if hasattr(c.location, "assign"):
             c.location.assign((c.location - center) * scale)
         else:
-            c.location = (np.array(c.location) - center) * scale
+            c.location = (keras.ops.convert_to_numpy(c.location) - center) * scale
 
 
 import os
